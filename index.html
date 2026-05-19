@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simulazione viale - V.le Martiri d'Ungheria, Ginosa</title>
+  <link rel="stylesheet" href="src/style.css" />
+</head>
+<body>
+<div class="page">
+  <section class="hero">
+    <div class="hero-text">
+      <h1>Simulazione del traffico — V.le Martiri d'Ungheria</h1>
+      <p>Ginosa (TA). Veicoli misti (city car, SUV, furgoni, camioncini, moto) che si comportano in modo realistico: rispettano la distanza di sicurezza, si fermano agli attraversamenti, danno la precedenza in immissione e usano davvero gli stalli di sosta.</p>
+    </div>
+    <div class="hero-meta">
+      <span class="badge"><span class="dot"></span> live</span>
+      <span class="badge">5 tavole · D–H</span>
+      <span class="badge">collisioni evitate</span>
+    </div>
+  </section>
+
+  <div class="layout">
+    <aside class="panel">
+      <h2>Tratto</h2>
+      <div class="field">
+        <label for="tractSelect">Tavola</label>
+        <select id="tractSelect"></select>
+      </div>
+      <div class="field">
+        <label for="scenarioSelect">Scenario</label>
+        <select id="scenarioSelect">
+          <option value="peak">Ora di punta</option>
+          <option value="crossing">Pedoni intensi</option>
+          <option value="driveway">Passi carrabili</option>
+          <option value="disabled">Persona disabile</option>
+          <option value="delivery">Furgone in consegna (parcheggia)</option>
+          <option value="block">Sosta selvaggia (furgone in corsia)</option>
+          <option value="slope">Pendenza · bici in difficoltà</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="profileSelect">Profilo di domanda</label>
+        <select id="profileSelect">
+          <option value="custom">Personalizzato</option>
+          <option value="quiet">Notte / festivo</option>
+          <option value="morning">Mattina feriale (7–9)</option>
+          <option value="midday">Pranzo (12–14)</option>
+          <option value="evening">Sera feriale (17–20)</option>
+          <option value="weekend">Sabato pomeriggio</option>
+        </select>
+      </div>
+
+      <h2>Flussi</h2>
+      <div class="field">
+        <label>Auto · veic/min</label>
+        <div class="sliderWrap"><input id="carFlow" type="range" min="0" max="60" value="15"><div class="valueBox" id="carFlowVal">15</div></div>
+      </div>
+      <div class="field">
+        <label>Bici · bici/min</label>
+        <div class="sliderWrap"><input id="bikeFlow" type="range" min="0" max="40" value="8"><div class="valueBox" id="bikeFlowVal">8</div></div>
+      </div>
+      <div class="field">
+        <label>Pedoni · ped/min</label>
+        <div class="sliderWrap"><input id="pedFlow" type="range" min="0" max="50" value="10"><div class="valueBox" id="pedFlowVal">10</div></div>
+      </div>
+      <div class="field">
+        <label>Manovre parcheggio · /h</label>
+        <div class="sliderWrap"><input id="parkingFlow" type="range" min="0" max="120" value="40"><div class="valueBox" id="parkingFlowVal">40</div></div>
+      </div>
+      <div class="field">
+        <label>Occupazione iniziale parcheggi (%)</label>
+        <div class="sliderWrap"><input id="parkingFill" type="range" min="0" max="100" value="65"><div class="valueBox" id="parkingFillVal">65</div></div>
+      </div>
+
+      <h2>Visualizzazione</h2>
+      <div class="checks">
+        <label><input type="checkbox" id="showImage" checked> Sfondo planimetria</label>
+        <label><input type="checkbox" id="showHotspots" checked> Zone critiche</label>
+        <label><input type="checkbox" id="showPaths"> Traiettorie</label>
+        <label><input type="checkbox" id="showStalls" checked> Posti auto</label>
+        <label><input type="checkbox" id="showLabels"> Etichette eventi</label>
+        <label><input type="checkbox" id="debugMode"> Modalità Debug (Log dev)</label>
+      </div>
+
+      <div class="btnRow" style="margin-top:14px">
+        <button class="btnPrimary" id="pauseBtn">⏸ Pausa</button>
+        <button class="btnGhost" id="resetBtn">↻ Reset</button>
+      </div>
+      <button id="calibrateBtn" class="btnAccent">🎯 Apri calibratore</button>
+
+      <div class="miniLegend">
+        <div class="legendItem"><span class="legendSwatch" style="background:#3b82f6"></span> city car</div>
+        <div class="legendItem"><span class="legendSwatch" style="background:#1e293b"></span> SUV</div>
+        <div class="legendItem"><span class="legendSwatch" style="background:#cbd5e1"></span> furgone</div>
+        <div class="legendItem"><span class="legendSwatch" style="background:#a16207"></span> camioncino</div>
+        <div class="legendItem"><span class="legendSwatch" style="background:#dc2626"></span> moto</div>
+        <div class="legendItem"><span class="legendSwatch" style="background:#ea580c"></span> bici</div>
+        <div class="legendItem"><span class="legendSwatch" style="background:#0f172a"></span> pedone</div>
+        <div class="legendItem"><span class="legendSwatch" style="background:#7c3aed"></span> stallo disabili</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="canvasCard">
+        <div class="titleRow">
+          <div>
+            <h3 id="tractTitle">—</h3>
+            <p id="tractDescription"></p>
+          </div>
+          <div class="toolbar">
+            <div class="chip">Pendenze <b id="slopeChip">—</b></div>
+            <div class="chip">Pista <b id="orientationChip">—</b></div>
+            <div class="chip">Scenario <b id="scenarioChip">—</b></div>
+            <div class="chip">Stalli <b id="stallsChip">—</b></div>
+            <button id="fullscreenBtn" class="btnGhost" style="height: 32px; padding: 0 12px; font-size: 11px;">🔲 Fullscreen</button>
+          </div>
+        </div>
+        <div class="stageWrap">
+          <canvas id="stage" width="1400" height="400"></canvas>
+        </div>
+      </section>
+
+      <section class="stats">
+        <div class="card stat-red"><div class="statValue" id="statCrashes">0</div><div class="statLabel">Incidenti</div><div class="statSub">/ sessione</div></div>
+        <div class="card stat-orange"><div class="statValue" id="statBrakes">0</div><div class="statLabel">Frenate brusche</div><div class="statSub">/ min</div></div>
+        <div class="card stat-violet"><div class="statValue" id="statNearMisses">0</div><div class="statLabel">Incidenti scampati</div><div class="statSub">totali</div></div>
+        <div class="card stat-blue"><div class="statValue" id="statParked">0</div><div class="statLabel">Auto in sosta</div><div class="statSub" id="statParkedSub">— / —</div></div>
+        <div class="card stat-green"><div class="statValue" id="statThrough">0</div><div class="statLabel">Veicoli passati</div><div class="statSub" id="statThroughSub">/ min · in transito —</div></div>
+      </section>
+
+      <section class="bottom">
+        <div class="card">
+          <h3>Bug strutturali del tratto</h3>
+          <ol class="list" id="bugList"></ol>
+        </div>
+        <div class="card">
+          <h3>Eventi live</h3>
+          <div class="log" id="logBox"></div>
+        </div>
+      </section>
+
+      <section class="note">
+        <b>Modello.</b> I veicoli seguono un car-following semplificato (distanza di sicurezza dinamica + frenata in funzione di accelerazione/decelerazione del tipo). Si fermano agli attraversamenti se ci sono pedoni e danno la precedenza in immissione. Gli stalli sono i singoli punti che disegni nel calibratore.
+      </section>
+    </main>
+  </div>
+</div>
+
+<script src="src/data.js"></script>
+<script src="src/simulator.js?v=11"></script>
+</body>
+</html>

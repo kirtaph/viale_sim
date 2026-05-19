@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8"/>
+<title>Calibrazione Traiettorie</title>
+<style>
+*{box-sizing:border-box;margin:0}
+body{font-family:Inter,Arial,sans-serif;background:#1a1a2e;color:#e0e0e0;display:flex;height:100vh;overflow:hidden}
+.sidebar{width:340px;min-width:340px;background:#16213e;padding:14px;overflow-y:auto;border-right:2px solid #0f3460;display:flex;flex-direction:column;gap:8px}
+h1{font-size:17px;color:#e94560}
+h2{font-size:12px;margin:6px 0 4px;color:#53a8b6;text-transform:uppercase;letter-spacing:.06em}
+label{display:block;font-size:12px;font-weight:700;margin-bottom:3px;color:#a0a0c0}
+select,button,input[type=text]{width:100%;height:34px;border:1px solid #0f3460;border-radius:8px;background:#1a1a2e;color:#e0e0e0;font-size:13px;font-weight:700;padding:0 8px}
+button{cursor:pointer;border:none;font-weight:900}
+.btn-pri{background:#e94560;color:#fff}
+.btn-sec{background:#0f3460;color:#e0e0e0}
+.btn-grn{background:#1f9d55;color:#fff}
+.btn-del{background:#8b0000;color:#fff}
+.btn-sm{height:28px;font-size:11px;border-radius:6px}
+.row{display:flex;gap:6px}
+.row>*{flex:1}
+.pathList{display:flex;flex-direction:column;gap:2px;max-height:280px;overflow-y:auto}
+.pItem{display:flex;align-items:center;gap:6px;padding:5px 7px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700}
+.pItem:hover,.pItem.active{background:rgba(255,255,255,.12)}
+.pItem .sw{width:12px;height:12px;border-radius:3px;flex-shrink:0}
+.pItem .ct{margin-left:auto;font-size:10px;color:#666}
+.pItem .del{margin-left:4px;background:none;border:none;color:#e94560;cursor:pointer;font-size:14px;width:auto;height:auto;padding:0 2px}
+.coords{font-family:monospace;font-size:10px;background:#111;border-radius:6px;padding:6px;max-height:120px;overflow:auto;word-break:break-all}
+.main{flex:1;overflow:auto;position:relative;padding:12px}
+canvas{display:block;cursor:crosshair}
+.status{position:fixed;bottom:12px;right:12px;background:#1f9d55;color:#fff;padding:8px 16px;border-radius:8px;font-weight:900;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:99}
+.status.show{opacity:1}
+.help{font-size:11px;color:#666;line-height:1.5}
+.help b{color:#e94560}
+.addPanel{display:flex;flex-direction:column;gap:4px;padding:8px;background:#0d1b36;border-radius:8px}
+.addPanel .row{margin-bottom:2px}
+.refPanel{font-size:11px;background:#0d1b36;padding:8px;border-radius:8px;margin-top:10px;color:#888;max-height:200px;overflow-y:auto;border:1px border solid #0f3460}
+.refPanel b{color:#53a8b6;display:block;margin-top:4px}
+.pItem .ow{font-size:10px;color:#e94560;font-weight:900;margin-left:4px}
+.pItem .tag{font-size:9px;background:#333;padding:1px 4px;border-radius:4px;margin-left:4px;color:#aaa}
+.pItem .toggle{margin-left:4px;cursor:pointer;opacity:.6}
+.pItem .toggle:hover{opacity:1}
+.row.valign{align-items:center}
+  
+  /* Collapsible Cards */
+  .card {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+  }
+  .card-header {
+    background: #1a1a2e;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid #0f3460;
+  }
+  .card-header:hover { background: #1f1f3a; }
+  .card-header h2 {
+    margin: 0;
+    font-size: 13px;
+    color: #53a8b6;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-header .toggle-icon {
+    font-size: 10px;
+    transition: transform 0.3s;
+    opacity: 0.5;
+  }
+  .card.collapsed .toggle-icon { transform: rotate(-90deg); }
+  .card.collapsed .card-body { display: none; }
+  .card-body { padding: 12px; }
+  
+  .sidebar { gap: 0; padding: 10px; }
+  h1 { margin-bottom: 15px; text-align: center; border-bottom: 1px solid #e9456033; padding-bottom: 10px; }
+  
+  .pItem { border: 1px solid transparent; margin-bottom: 2px; background: rgba(255,255,255,0.03); }
+  .pItem.active { border-color: #e94560; background: rgba(233,69,96,0.1); }
+</style>
+</head>
+<body>
+<aside class="sidebar">
+  <h1>🎯 Calibratore Traiettorie</h1>
+  
+  <div class="card">
+    <div class="card-header" onclick="toggleCard(this)">
+      <h2>🗺️ Tavola e Zoom</h2>
+      <span class="toggle-icon">▼</span>
+    </div>
+    <div class="card-body">
+      <div style="margin-bottom:8px">
+        <label>Seleziona Tract</label>
+        <select id="tractSel"></select>
+      </div>
+      <div class="row">
+        <button class="btn-sec btn-sm" id="zOut">−</button>
+        <button class="btn-sec btn-sm" id="zFit">Fit</button>
+        <button class="btn-sec btn-sm" id="zIn">+</button>
+        <button class="btn-sec btn-sm" id="z100">1:1</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card collapsed">
+    <div class="card-header" onclick="toggleCard(this)">
+      <h2>📈 Traiettorie</h2>
+      <span class="toggle-icon">▼</span>
+    </div>
+    <div class="card-body" style="padding:8px">
+      <div class="pathList" id="pathList"></div>
+    </div>
+  </div>
+
+  <div class="card collapsed" id="propCard">
+    <div class="card-header" onclick="toggleCard(this)">
+      <h2>⚙️ Proprietà Elemento</h2>
+      <span class="toggle-icon">▼</span>
+    </div>
+    <div class="card-body">
+      <div class="addPanel">
+        <div class="row valign">
+           <label style="flex:1"><input type="checkbox" id="oneWayCheck"> Senso Unico</label>
+           <select id="dirSel" style="flex:1.5;height:24px;font-size:11px">
+             <option value="both">Entrambe dir.</option>
+             <option value="in">Solo Entrata</option>
+             <option value="out">Solo Uscita</option>
+           </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card collapsed">
+    <div class="card-header" onclick="toggleCard(this)">
+      <h2>➕ Aggiungi Elemento</h2>
+      <span class="toggle-icon">▼</span>
+    </div>
+    <div class="card-body">
+      <div class="addPanel">
+        <div class="row">
+          <select id="addType">
+            <option value="sidestreet">Traversa (Incrocio)</option>
+            <option value="crossing">Attrav. Pedonale</option>
+            <option value="driveway">Passo carrabile</option>
+            <option value="stall">Stallo Parcheggio</option>
+            <option value="disabled">Stallo Disabili</option>
+            <option value="moto">Stallo Moto</option>
+            <option value="hotspot">Zona Critica</option>
+            <option value="blockage">Furgone</option>
+          </select>
+        </div>
+        <input type="text" id="addName" placeholder="Nome (es. Via Rossi)..." style="margin: 4px 0"/>
+        <button class="btn-grn btn-sm" id="addBtn">+ Aggiungi / Posiziona</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card collapsed">
+    <div class="card-header" onclick="toggleCard(this)">
+      <h2>🛠️ Azioni Veloci</h2>
+      <span class="toggle-icon">▼</span>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <button class="btn-sec btn-sm" id="undoBtn">↩ Undo</button>
+        <button class="btn-del btn-sm" id="clearBtn">🗑 Svuota</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card collapsed">
+    <div class="card-header" onclick="toggleCard(this)">
+      <h2>📖 Info di Riferimento</h2>
+      <span class="toggle-icon">▼</span>
+    </div>
+    <div class="card-body">
+      <div class="refPanel" id="refPanel" style="margin-top:0"></div>
+    </div>
+  </div>
+
+  <div class="card collapsed">
+    <div class="card-header" onclick="toggleCard(this)">
+      <h2>📏 Scala Veicoli</h2>
+      <span class="toggle-icon">▼</span>
+    </div>
+    <div class="card-body">
+      <div style="background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px;">
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input type="range" id="scaleSlider" min="0.5" max="3.0" step="0.01" value="1.0" style="flex:1">
+          <input type="number" id="scaleVal" value="1.0" step="0.01" style="width:65px; background:#1a1a2e; color:#fff; border:1px solid #444;">
+        </div>
+        <div style="font-size:10px; color:#aaa; margin-top:4px;">Regola finché il SUV fantasma non occupa un parcheggio.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card collapsed">
+    <div class="card-header" onclick="toggleCard(this)">
+      <h2>💾 Salvataggio</h2>
+      <span class="toggle-icon">▼</span>
+    </div>
+    <div class="card-body">
+      <button class="btn-grn" id="saveBtn" style="margin-bottom:8px">💾 Salva nel Simulatore</button>
+      <div class="row">
+        <button class="btn-sec btn-sm" id="exportBtn">📋 JSON</button>
+        <button class="btn-sec btn-sm" id="downloadBtn">📥 File</button>
+      </div>
+      <button class="btn-del btn-sm" id="resetStorBtn" style="margin-top:8px">🗑 Reset locale</button>
+    </div>
+  </div>
+
+  <div class="help" style="margin-top:8px; padding: 0 8px">
+    <b>Click sx</b>: aggiungi punto<br>
+    <b>Drag</b>: sposta punto<br>
+    <b>Click dx</b>: rimuovi punto<br>
+    <b>Scroll</b>: zoom
+  </div>
+</aside>
+<div class="main" id="mainArea">
+  <canvas id="canvas"></canvas>
+</div>
+<div class="status" id="status"></div>
+
+<script>
+function toggleCard(header) {
+  const card = header.parentElement;
+  const isCollapsed = card.classList.contains('collapsed');
+  
+  // Chiudi tutte le altre card
+  document.querySelectorAll('.sidebar .card').forEach(c => {
+    c.classList.add('collapsed');
+  });
+  
+  // Se era chiusa, aprila. Se era aperta, in questo caso l'utente vuole che rimanga aperta o si chiuda?
+  // "Se ne apro un altra chiudo quella aperta" implica che solo una è aperta.
+  // Se clicco su quella già aperta, di solito in un accordion si richiude.
+  if (isCollapsed) {
+    card.classList.remove('collapsed');
+  }
+}
+
+(() => {
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const mainArea = document.getElementById('mainArea');
+const statusEl = document.getElementById('status');
+let vehicleScale = 1.0;
+let refSUV = { x: 100, y: 100, angle: 0 };
+
+const COLORS = {carPath:'#1d72ff',bikePath:'#ff8a00',sidestreet:'#1d72ff',crossing:'rgba(255,255,255,0.4)',driveway:'#7c4dff',stall:'rgba(31,157,85,0.4)',disabled:'rgba(31,157,85,0.4)',moto:'rgba(234,179,8,0.4)',hotspot:'rgba(233,69,96,0.3)',blockage:'#e94560'};
+const AREA_TYPES = ['crossing','stall','disabled','moto','hotspot'];
+
+const defaultTracts = {
+  D:{title:'D · Isolati 01-02-03',image:'./viale_sim_assets/D.png',w:1165,h:296},
+  E:{title:'E · Isolati 03-04-05-06',image:'./viale_sim_assets/E.png',w:1176,h:225},
+  F:{title:'F · Isolati 06-07-08-09',image:'./viale_sim_assets/F.png',w:1800,h:373},
+  G:{title:'G · Isolati 09-10-11-12',image:'./viale_sim_assets/G.png',w:1798,h:399},
+  H:{title:'H · Isolati 12-13-14-15',image:'./viale_sim_assets/H.png',w:1798,h:470}
+};
+
+const defaultPaths = {
+  D:{carPath:[[18,106],[95,107],[170,108],[290,110],[420,112],[545,114],[670,114],[795,112],[920,110],[1045,109],[1148,108]],bikePath:[[1110,208],[1000,207],[900,207],[780,208],[660,210],[545,210],[420,209],[300,207],[190,204],[85,200]],crossings:[{name:'Via Toti',path:[[72,82],[72,222]]},{name:'Attraversamento centrale',path:[[515,98],[515,218]]},{name:'Via Bainsizza',path:[[1045,92],[1045,218]]}],driveways:[{name:'Accesso 1',path:[[640,272],[640,245],[636,218],[630,195]]},{name:'Accesso 2',path:[[935,270],[935,244],[930,218],[926,196]]}],disabled:[{name:'Stallo disabili',path:[[500,120],[500,148],[500,182],[500,214]]}],hotspots:[],blockage:{x:690,y:108},sideStreets:[],stalls:[],moto:[]},
+  E:{carPath:[],bikePath:[],crossings:[],driveways:[],disabled:[],hotspots:[],blockage:{x:0,y:0},sideStreets:[],stalls:[],moto:[]},
+  F:{carPath:[],bikePath:[],crossings:[],driveways:[],disabled:[],hotspots:[],blockage:{x:0,y:0},sideStreets:[],stalls:[],moto:[]},
+  G:{carPath:[],bikePath:[],crossings:[],driveways:[],disabled:[],hotspots:[],blockage:{x:0,y:0},sideStreets:[],stalls:[],moto:[]},
+  H:{carPath:[],bikePath:[],crossings:[],driveways:[],disabled:[],hotspots:[],blockage:{x:0,y:0},sideStreets:[],stalls:[],moto:[]}
+};
+
+let currentKey = new URLSearchParams(location.search).get('tract') || 'D';
+let activePath = 'carPath';
+let zoom = 1;
+let bgImage = new Image();
+let dragging = null;
+let paths = {}; 
+let hiddenPaths = new Set();
+let oneWayPaths = new Set();
+let directions = {}; // side street directions
+
+const GRAB_R = 12;
+
+function tractToEditable(data) {
+  const out = {};
+  oneWayPaths.clear(); directions = {};
+  out.carPath = JSON.parse(JSON.stringify(data.carPath || []));
+  out.bikePath = JSON.parse(JSON.stringify(data.bikePath || []));
+  
+  (data.crossings||[]).forEach(c => { 
+    const k = 'crossing:'+c.name; out[k] = c.path || [[c.x,c.y1],[c.x,c.y2]]; 
+    if(c.oneWay) oneWayPaths.add(k);
+  });
+  (data.sideStreets||[]).forEach(s => {
+    const k = 'sidestreet:'+s.name; out[k] = s.path || [];
+    if(s.oneWay) oneWayPaths.add(k);
+    directions[k] = s.direction || 'both';
+  });
+  (data.driveways||[]).forEach(d => { out['driveway:'+d.name] = JSON.parse(JSON.stringify(d.path)); });
+  (data.stalls||[]).forEach(s => { out['stall:'+s.name] = JSON.parse(JSON.stringify(s.path)); });
+  (data.disabled||[]).forEach(d => { out['disabled:'+d.name] = JSON.parse(JSON.stringify(d.path)); });
+  (data.moto||[]).forEach(m => { out['moto:'+m.name] = JSON.parse(JSON.stringify(m.path)); });
+  (data.hotspots||[]).forEach((h,i) => { 
+    out['hotspot:'+(h.name||i)] = h.area || [[h.x,h.y],[h.x+h.w,h.y],[h.x+h.w,h.y+h.h],[h.x,h.y+h.h]]; 
+  });
+  if(data.blockage) out['blockage:furgone'] = [[data.blockage.x, data.blockage.y]];
+  
+  vehicleScale = data.scale || 1.0;
+  refSUV = data.refSUV || { x: defaultTracts[currentKey].w/2, y: defaultTracts[currentKey].h/2, angle: 0 };
+  if(document.getElementById('scaleSlider')) document.getElementById('scaleSlider').value = vehicleScale;
+  if(document.getElementById('scaleVal')) document.getElementById('scaleVal').value = vehicleScale;
+
+  return out;
+}
+
+function editableToTract(ed) {
+  const out = {crossings:[], sideStreets:[], driveways:[], stalls:[], disabled:[], moto:[], hotspots:[], blockage:{x:0,y:0}, scale: vehicleScale, refSUV: refSUV};
+  out.carPath = ed.carPath || [];
+  out.bikePath = ed.bikePath || [];
+  Object.keys(ed).forEach(k => {
+    const pts = ed[k];
+    if(k.startsWith('crossing:')) out.crossings.push({name:k.slice(9), path:pts, oneWay:oneWayPaths.has(k)});
+    if(k.startsWith('sidestreet:')) out.sideStreets.push({name:k.slice(11), path:pts, oneWay:oneWayPaths.has(k), direction:directions[k]||'both'});
+    if(k.startsWith('driveway:')) out.driveways.push({name:k.slice(9), path:pts});
+    if(k.startsWith('stall:')) out.stalls.push({name:k.slice(6), path:pts});
+    if(k.startsWith('disabled:')) out.disabled.push({name:k.slice(9), path:pts});
+    if(k.startsWith('moto:')) out.moto.push({name:k.slice(5), path:pts});
+    if(k.startsWith('hotspot:')) {
+      out.hotspots.push({name:k.slice(8), area:pts});
+    }
+    if(k.startsWith('blockage:')) {
+      if(pts.length>=1) out.blockage = {x:pts[0][0], y:pts[0][1]};
+    }
+  });
+  return out;
+}
+
+let calibrationData = null;
+
+async function loadCalibrationFile() {
+  try {
+    const res = await fetch('viale_calibration.json?' + Date.now());
+    if (res.ok) {
+      calibrationData = await res.json();
+    }
+  } catch(e) { console.warn('Nessun file di calibrazione trovato.'); }
+}
+
+function loadFromStorage(key) {
+  if (calibrationData && calibrationData[key]) return calibrationData[key];
+  try {
+    const s = localStorage.getItem('viale_tract_' + key);
+    return s ? JSON.parse(s) : null;
+  } catch(e) { return null; }
+}
+
+function updateRefPanel() {
+  const panel = document.getElementById('refPanel');
+  let html = '<b>Dati Ginosa (Riferimento):</b>';
+  if(currentKey === 'D' || currentKey === 'E') {
+    html += '• Tavola 8.3<br>• Vie: Toti, Bainsizza, Oslavia<br>';
+  } else {
+    html += '• Tavola 8.4<br>• Vie: Rosselli, Di Vittorio, La Malfa<br>';
+  }
+  html += '• Scala 1:200 | Corsia: 3.50m';
+  panel.innerHTML = html;
+}
+
+function loadTract() {
+  const stored = loadFromStorage(currentKey);
+  const base = stored || defaultPaths[currentKey];
+  paths = tractToEditable(base);
+  hiddenPaths.clear();
+  if(!paths[activePath]) activePath = 'carPath';
+  syncPropUI();
+  const t = defaultTracts[currentKey];
+  bgImage = new Image();
+  bgImage.onload = () => { fitZoom(); render(); };
+  bgImage.src = t.image;
+  canvas.width = t.w; canvas.height = t.h;
+  buildList(); updateRefPanel();
+}
+
+function syncPropUI() {
+  document.getElementById('oneWayCheck').checked = oneWayPaths.has(activePath);
+  document.getElementById('dirSel').value = directions[activePath] || 'both';
+  document.getElementById('dirSel').disabled = !activePath.startsWith('sidestreet:');
+}
+
+const tractSel = document.getElementById('tractSel');
+Object.keys(defaultTracts).forEach(k => {
+  const o = document.createElement('option');
+  o.value = k; o.textContent = defaultTracts[k].title;
+  tractSel.appendChild(o);
+});
+tractSel.value = currentKey;
+tractSel.onchange = () => { currentKey = tractSel.value; loadTract(); };
+
+document.getElementById('oneWayCheck').onchange = (e) => {
+  if(e.target.checked) oneWayPaths.add(activePath); else oneWayPaths.delete(activePath);
+  buildList(); render();
+};
+document.getElementById('dirSel').onchange = (e) => {
+  directions[activePath] = e.target.value;
+  buildList(); render();
+};
+
+function pathColor(name) {
+  if(name==='carPath') return COLORS.carPath;
+  if(name==='bikePath') return COLORS.bikePath;
+  if(name.startsWith('sidestreet:')) return COLORS.sidestreet;
+  if(name.startsWith('crossing:')) return COLORS.crossing;
+  if(name.startsWith('driveway:')) return COLORS.driveway;
+  if(name.startsWith('stall:')) return COLORS.stall;
+  if(name.startsWith('disabled:')) return COLORS.disabled;
+  if(name.startsWith('moto:')) return COLORS.moto;
+  if(name.startsWith('hotspot:')) return COLORS.hotspot;
+  if(name.startsWith('blockage:')) return COLORS.blockage;
+  return '#888';
+}
+
+function pathTypeLabel(name) {
+  if(name==='carPath') return '🚗';
+  if(name==='bikePath') return '🚲';
+  if(name.startsWith('sidestreet:')) return '🛣️';
+  if(name.startsWith('crossing:')) return '🚶';
+  if(name.startsWith('driveway:')) return '🅿️';
+  if(name.startsWith('stall:')) return '🅿️';
+  if(name.startsWith('disabled:')) return '♿';
+  if(name.startsWith('moto:')) return '🏍️';
+  if(name.startsWith('hotspot:')) return '🔥';
+  if(name.startsWith('blockage:')) return '🚚';
+  return '?';
+}
+
+function canDelete(name) { return !['carPath','bikePath'].includes(name); }
+
+function buildList() {
+  const list = document.getElementById('pathList');
+  list.innerHTML = '';
+  Object.keys(paths).forEach(name => {
+    const div = document.createElement('div');
+    div.className = 'pItem' + (name===activePath?' active':'');
+    const isHidden = hiddenPaths.has(name);
+    const isOW = oneWayPaths.has(name);
+    const dir = directions[name];
+    div.innerHTML = `<span class="sw" style="background:${pathColor(name)}"></span>
+      <span style="flex:1">${pathTypeLabel(name)} ${name}${isOW?'<span class="ow">1-WAY</span>':''}${dir && dir!=='both'?'<span class="tag">'+dir.toUpperCase()+'</span>':''}</span>
+      <span class="ct">${paths[name].length}pt</span>
+      <span class="toggle" data-name="${name}" title="Toggle visibilità">${isHidden?'👁️‍🗨️':'👁️'}</span>
+      ${canDelete(name) ? '<button class="del" data-name="'+name+'">✕</button>' : ''}`;
+    
+    div.onclick = (e) => {
+      if(e.target.classList.contains('del') || e.target.classList.contains('toggle')) return;
+      activePath = name; syncPropUI(); buildList(); render();
+    };
+    list.appendChild(div);
+  });
+
+  list.querySelectorAll('.toggle').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const n = btn.dataset.name;
+      if(hiddenPaths.has(n)) hiddenPaths.delete(n); else hiddenPaths.add(n);
+      buildList(); render();
+    };
+  });
+  list.querySelectorAll('.del').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const n = btn.dataset.name;
+      if(confirm('Eliminare "'+n+'"?')) {
+        delete paths[n]; if(activePath===n) activePath='carPath';
+        buildList(); render();
+      }
+    };
+  });
+}
+
+function flash(msg) {
+  statusEl.textContent = msg; statusEl.classList.add('show');
+  setTimeout(() => statusEl.classList.remove('show'), 1800);
+}
+
+function fitZoom() {
+  const t = defaultTracts[currentKey];
+  zoom = Math.min((mainArea.clientWidth-30)/t.w, (mainArea.clientHeight-30)/t.h, 1);
+  applyZoom();
+}
+function applyZoom() {
+  const t = defaultTracts[currentKey];
+  canvas.style.width = (t.w*zoom)+'px';
+  canvas.style.height = (t.h*zoom)+'px';
+}
+document.getElementById('zIn').onclick = () => { zoom=Math.min(4,zoom*1.3); applyZoom(); };
+document.getElementById('zOut').onclick = () => { zoom=Math.max(.1,zoom*.77); applyZoom(); };
+document.getElementById('zFit').onclick = fitZoom;
+document.getElementById('z100').onclick = () => { zoom=1; applyZoom(); };
+mainArea.addEventListener('wheel', e => { e.preventDefault(); zoom*=e.deltaY<0?1.12:.89; zoom=Math.max(.1,Math.min(4,zoom)); applyZoom(); }, {passive:false});
+
+function render() {
+  const t = defaultTracts[currentKey];
+  ctx.clearRect(0,0,t.w,t.h);
+  ctx.fillStyle='#f7f3e9'; ctx.fillRect(0,0,t.w,t.h);
+  if(bgImage.complete) ctx.drawImage(bgImage,0,0,t.w,t.h);
+
+  Object.keys(paths).forEach(name => {
+    if(hiddenPaths.has(name)) return;
+    const pts = paths[name];
+    const color = pathColor(name);
+    const active = name===activePath;
+    ctx.save();
+    ctx.globalAlpha = active?1:.3;
+    
+    const isArea = AREA_TYPES.some(t => name.startsWith(t+':'));
+    
+    if(isArea) {
+      if(pts.length > 2) {
+        ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+        for(let i=1; i<pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+        ctx.closePath();
+        ctx.fillStyle = color; ctx.fill();
+        ctx.strokeStyle = active ? '#fff' : color.replace('0.4','1').replace('0.3','1');
+        ctx.lineWidth = active ? 2 : 1;
+        ctx.stroke();
+      }
+    } else if(name.startsWith('blockage:')) {
+      if(pts.length>=1) {
+        ctx.fillStyle = color; ctx.fillRect(pts[0][0]-15, pts[0][1]-8, 30, 16);
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(pts[0][0]-15, pts[0][1]-8, 30, 16);
+      }
+    } else {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = active?4:2;
+      const isDash = !['carPath','bikePath','sidestreet:'].some(x => name.startsWith(x));
+      ctx.setLineDash(isDash?[6,4]:[]);
+      if(pts.length>1) {
+        ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
+        for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+        ctx.stroke();
+      }
+    }
+
+    pts.forEach((p,i) => {
+      ctx.beginPath(); ctx.arc(p[0],p[1],active?7:4,0,Math.PI*2);
+      ctx.fillStyle=color; ctx.fill();
+      ctx.strokeStyle='#000'; ctx.lineWidth=2; ctx.stroke();
+      if(active) {
+        ctx.fillStyle='#fff'; ctx.font='bold 11px monospace';
+        ctx.fillText(i+'',p[0]+9,p[1]-7);
+      }
+    });
+    ctx.restore();
+  });
+
+  // Draw Ghost SUV for scale reference
+  ctx.save();
+  ctx.translate(refSUV.x, refSUV.y);
+  ctx.rotate(refSUV.angle);
+  ctx.globalAlpha = 0.9;
+  ctx.strokeStyle = '#ffff00'; ctx.lineWidth = 3; ctx.setLineDash([6,3]);
+  const sw = 36 * vehicleScale, sh = 16 * vehicleScale;
+  ctx.strokeRect(-sw/2, -sh/2, sw, sh);
+  ctx.fillStyle = 'rgba(255,255,0,0.15)'; ctx.fillRect(-sw/2, -sh/2, sw, sh);
+  ctx.fillStyle = '#ffff00'; ctx.font = 'bold 14px Inter, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.shadowBlur = 4; ctx.shadowColor = '#000';
+  ctx.fillText('SUV DI RIFERIMENTO (5m)', 0, -sh/2 - 12);
+  ctx.restore();
+}
+
+function canvasXY(e) {
+  const r = canvas.getBoundingClientRect();
+  return [Math.round((e.clientX-r.left)/zoom), Math.round((e.clientY-r.top)/zoom)];
+}
+function findNearest(pts,x,y) {
+  let best=-1,bestD=1e9;
+  pts.forEach((p,i) => { const d=Math.hypot(p[0]-x,p[1]-y); if(d<bestD){bestD=d;best=i;} });
+  return {idx:best,dist:bestD};
+}
+function ptSegDist(px,py,a,b) {
+  const dx=b[0]-a[0],dy=b[1]-a[1],len2=dx*dx+dy*dy;
+  if(!len2) return Math.hypot(px-a[0],py-a[1]);
+  let t=((px-a[0])*dx+(py-a[1])*dy)/len2;
+  t=Math.max(0,Math.min(1,t));
+  return Math.hypot(px-(a[0]+t*dx),py-(a[1]+t*dy));
+}
+
+canvas.addEventListener('mousedown', e => {
+  e.preventDefault();
+  const [x,y] = canvasXY(e);
+  
+  // SUV Drag/Rotate Check
+  if(Math.hypot(refSUV.x - x, refSUV.y - y) < 50 / zoom){
+    dragging = 'suv';
+    return;
+  }
+
+  const pts = paths[activePath];
+  if(!pts) return;
+
+  if(e.button===2) {
+    const {idx,dist}=findNearest(pts,x,y);
+    if(idx>=0 && dist<GRAB_R/zoom+15) { pts.splice(idx,1); buildList(); render(); }
+    return;
+  }
+
+  const {idx,dist}=findNearest(pts,x,y);
+  if(idx>=0 && dist<GRAB_R/zoom+8) {
+    dragging=idx;
+  } else {
+    if(activePath.startsWith('blockage:') && pts.length >= 1) {
+      dragging=0; pts[0]=[x,y];
+    } else {
+      let bestIdx=pts.length;
+      if(pts.length>=2 && !activePath.startsWith('hotspot:')) {
+        let bestD=1e9;
+        let insertIdx=pts.length;
+        for(let i=0;i<pts.length-1;i++) { const d=ptSegDist(x,y,pts[i],pts[i+1]); if(d<bestD){bestD=d;insertIdx=i+1;} }
+        if(bestD < 20 / zoom) bestIdx=insertIdx;
+        if(Math.hypot(x-pts[0][0],y-pts[0][1])<30/zoom) bestIdx=0;
+        if(Math.hypot(x-pts[pts.length-1][0],y-pts[pts.length-1][1])<30/zoom) bestIdx=pts.length;
+      }
+      pts.splice(bestIdx,0,[x,y]);
+      dragging=bestIdx;
+    }
+    buildList(); render();
+  }
+});
+canvas.addEventListener('mousemove', e => {
+  if(dragging===null) return;
+  const [x,y]=canvasXY(e);
+  
+  if(dragging === 'suv'){
+    if(e.altKey){
+      refSUV.angle = Math.atan2(y - refSUV.y, x - refSUV.x);
+    } else {
+      refSUV.x = x; refSUV.y = y;
+    }
+    render();
+    return;
+  }
+
+  paths[activePath][dragging]=[x,y];
+  render();
+});
+canvas.addEventListener('mouseup', () => { dragging=null; });
+canvas.addEventListener('mouseleave', () => { dragging=null; });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+document.getElementById('addBtn').onclick = () => {
+  const type = document.getElementById('addType').value;
+  const name = document.getElementById('addName').value.trim() || 'nuovo';
+  const key = type + ':' + name;
+  if(paths[key]) { alert('Esiste già un elemento con questo nome'); return; }
+  
+  // Inizializza come array vuoto per permettere il posizionamento manuale
+  paths[key] = [];
+  
+  activePath = key;
+  syncPropUI(); buildList(); render();
+  flash('Fai click sulla mappa per posizionare il primo punto di: ' + name);
+  
+  // Apri il card delle proprietà e chiudi gli altri
+  const propCard = document.getElementById('propCard');
+  if(propCard) {
+    document.querySelectorAll('.sidebar .card').forEach(c => c.classList.add('collapsed'));
+    propCard.classList.remove('collapsed');
+  }
+};
+
+document.getElementById('undoBtn').onclick = () => {
+  const pts=paths[activePath];
+  if(pts&&pts.length){pts.pop(); buildList(); render();}
+};
+document.getElementById('clearBtn').onclick = () => {
+  if(!confirm('Svuotare?')) return;
+  paths[activePath]=[]; buildList(); render();
+};
+
+document.getElementById('scaleSlider').oninput = (e) => {
+  vehicleScale = parseFloat(e.target.value);
+  document.getElementById('scaleVal').value = vehicleScale;
+  render();
+};
+document.getElementById('scaleVal').oninput = (e) => {
+  vehicleScale = parseFloat(e.target.value) || 1.0;
+  document.getElementById('scaleSlider').value = vehicleScale;
+  render();
+};
+
+document.getElementById('saveBtn').onclick = async () => {
+  const data = editableToTract(paths);
+  localStorage.setItem('viale_tract_'+currentKey, JSON.stringify(data));
+  
+  if (!calibrationData) calibrationData = {};
+  ['D','E','F','G','H'].forEach(k => {
+    const stored = loadFromStorage(k);
+    calibrationData[k] = stored || defaultPaths[k];
+  });
+  calibrationData[currentKey] = data;
+
+  try {
+    const res = await fetch('save_calibration.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(calibrationData)
+    });
+    if (res.ok) {
+      flash('✅ Salvato su File!');
+    } else {
+      flash('⚠️ Salvato solo locale!');
+    }
+  } catch(e) {
+    flash('⚠️ Salvato solo in locale!');
+  }
+};
+
+document.getElementById('exportBtn').onclick = () => {
+  const allData = {};
+  ['D','E','F','G','H'].forEach(k => {
+    const stored = loadFromStorage(k);
+    allData[k] = stored || defaultPaths[k];
+  });
+  allData[currentKey] = editableToTract(paths);
+  navigator.clipboard.writeText(JSON.stringify(allData, null, 2)).then(() => flash('📋 Copiato!'));
+};
+
+document.getElementById('downloadBtn').onclick = () => {
+  const allData = {};
+  ['D','E','F','G','H'].forEach(k => {
+    const stored = loadFromStorage(k);
+    allData[k] = stored || defaultPaths[k];
+  });
+  allData[currentKey] = editableToTract(paths);
+  const blob = new Blob([JSON.stringify(allData, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'viale_calibration.json'; a.click();
+};
+
+document.getElementById('resetStorBtn').onclick = () => {
+  if(!confirm('Reset tavola?')) return;
+  localStorage.removeItem('viale_tract_'+currentKey); loadTract();
+};
+
+async function initApp() {
+  await loadCalibrationFile();
+  loadTract();
+}
+initApp();
+})();
+</script>
+</body>
+</html>
