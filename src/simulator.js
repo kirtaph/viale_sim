@@ -418,7 +418,7 @@
       }
       c.intersectsBikePath = minD < 15;
     });
-    entities = {cars:[], bikes:[], peds:[], drivewayCars:[], sideCars:[], parked:[], van:null};
+    entities = {cars:[], bikes:[], peds:[], drivewayCars:[], sideCars:[], parked:[], van:null, ambulance:null};
     flashes = []; spawners = {car:0,bike:0,ped:0,driveway:0,side:0,special:0,parking:0,delivery:0};
     if(full){
       stats = {crashes:0, nearMisses:0};
@@ -557,7 +557,7 @@
     const def = vDim(type);
     const s = (tract && tract.scale) ? tract.scale : 1.0;
     const speedVar = rand(0.8, 1.2);
-    const startT = isNaN(opts.startT) ? 0 : (opts.startT || 0);
+    const startT = (opts.startT !== undefined) ? opts.startT : -0.08;
     const pathLen = pathTotalLength(tract.carPath);
     const maxSpeed = carBaseSpeed() * (VEHICLE_TYPES[type].speedFactor) * speedVar * s;
     return {
@@ -574,7 +574,7 @@
     };
   }
   function spawnCar(opts){
-    const entryT = (opts && opts.startT) || 0;
+    const entryT = (opts && opts.startT !== undefined) ? opts.startT : -0.08;
     const carPathLen = pathTotalLength(tract.carPath);
     const entryDist = entryT * carPathLen;
     const tooClose = entities.cars.some(c => (c.state === 'driving' || c.state === 'illegal-stopped') && c.dist < entryDist + 160 && c.dist > entryDist - 5);
@@ -594,8 +594,8 @@
   function spawnBike(){
     const s = (tract && tract.scale) ? tract.scale : 1.0;
     const dir = Math.random() < .5 ? 1 : -1;
-    const startT = dir === 1 ? 0 : 1;
-    const startPt = pointOnPath(tract.bikePathFwd, startT);
+    const startT = dir === 1 ? -0.08 : 1.08;
+    const startPt = pointOnPath(tract.bikePathFwd, dir === 1 ? 0 : 1);
     
     const pedBusy = entities.peds.some(p => {
        const pp = pointOnPath(p.path, p.t);
@@ -610,7 +610,7 @@
     if(bikeBusy) return false;
 
     entities.bikes.push({
-      dir, t: startT, dist: 0,
+      dir, t: startT, dist: startT === -0.08 ? -0.08 * pathTotalLength(tract.bikePathFwd) : 1.08 * pathTotalLength(tract.bikePathFwd),
       baseSpeed: bikeBaseSpeed() * rand(0.75, 1.25) * s,
       _emergencyHold: 0
     });
@@ -640,7 +640,7 @@
     const s = (tract && tract.scale) ? tract.scale : 1.0;
     entities.drivewayCars.push({
       type, ...vDim(type),
-      path:d.path, t:0, dist:0, baseSpeed: (len/7) * s, name:d.name,
+      path:d.path, t:-0.08, dist:-0.08 * len, baseSpeed: (len/7) * s, name:d.name,
       state:'travelling', _emergencyHold: 0
     });
   }
@@ -656,7 +656,7 @@
     const sc = (tract && tract.scale) ? tract.scale : 1.0;
     entities.sideCars.push({
       type, ...vDim(type),
-      path:s.path, t:0, dist:0, baseSpeed: (len/3.5) * sc, name:s.name,
+      path:s.path, t:-0.08, dist:-0.08 * len, baseSpeed: (len/3.5) * sc, name:s.name,
       state:'travelling', _emergencyHold: 0
     });
   }
@@ -715,6 +715,36 @@
     addFlash(tract.blockage.x, tract.blockage.y, 32, 'CANTIERE STRADALE', 'rgba(234,179,8,.85)');
     return true;
   }
+  function spawnDropOff(){
+    if(entities.cars.some(c => c.isDropOff)) return false;
+    const tooClose = entities.cars.some(c => (c.state === 'driving' || c.state === 'illegal-stopped') && c.dist < 60 && c.dist > -120);
+    if(tooClose) return false;
+    
+    const w = makeCar({type: 'citycar', startT: -0.08});
+    w.id = 'dropoff_' + Math.random();
+    w.isDropOff = true;
+    w.targetDropOffT = rand(0.30, 0.70);
+    w.dropOffLife = 14;
+    w.passengerSpawned = false;
+    
+    entities.cars.push(w);
+    pushLog('dropoff', '🚗 Auto di cortesia entra in carreggiata per effettuare una sosta temporanea.', 'info');
+    return true;
+  }
+  function spawnAmbulance(){
+    if(entities.ambulance) return false;
+    const tooClose = entities.cars.some(c => (c.state === 'driving' || c.state === 'illegal-stopped') && c.dist < 60 && c.dist > -120);
+    if(tooClose) return false;
+    const s = (tract && tract.scale) ? tract.scale : 1.0;
+    const a = makeCar({type: 'ambulance', speed: carBaseSpeed() * 1.45 * s, startT: -0.08});
+    a.id = 'ambulance_' + Math.random();
+    a.isAmbulance = true;
+    entities.cars.push(a);
+    entities.ambulance = {ref: a};
+    pushLog('emergency', '🚑 Emergenza: Sirene spiegate! Ambulanza in arrivo ad alta velocità. I veicoli accelerano.', 'crash');
+    addFlash(30, tract.carPath[0][1], 50, 'AMBULANZA', 'rgba(37,99,235,.85)');
+    return true;
+  }
 
   function manageSpawns(dt){
     const scenario = ui.scenarioSelect.value;
@@ -754,6 +784,14 @@
     }
     if(scenario==='roadworks' && spawners.special <= 0){
        if(spawnRoadworks()) spawners.special = rand(25, 45);
+       else spawners.special = 1;
+    }
+    if(scenario==='dropoff' && spawners.special <= 0){
+       if(spawnDropOff()) spawners.special = rand(25, 45);
+       else spawners.special = 1;
+    }
+    if(scenario==='ambulance' && spawners.special <= 0){
+       if(spawnAmbulance()) spawners.special = rand(30, 50);
        else spawners.special = 1;
     }
 
@@ -975,6 +1013,17 @@
 
     drivingCars.forEach(c => {
       c.stopReason = null;
+      if(c.isDropOff && c.t >= c.targetDropOffT){
+         c.state = 'illegal-stopped';
+         c.speed = 0;
+         c.dropOffLife = 14;
+         c.passengerSpawned = false;
+         
+         const carPos = pointOnPath(tract.carPath, c.t);
+         pushLog('dropoff', '🚗 Sosta temporanea: L\'auto si ferma in carreggiata per far scendere l\'anziano.', 'yield');
+         addFlash(carPos.x, carPos.y, 32, 'DISCESA ANZIANO', 'rgba(249,115,22,.85)');
+         return;
+      }
       const cp = pointOnPath(tract.carPath, c.t);
       if(!cp) return; // Safety check
       let ahead = null;
@@ -1022,6 +1071,17 @@
 
       let target = c.maxSpeed;
       let braking = false;
+
+      if(entities.ambulance && entities.ambulance.ref !== c){
+        const amb = entities.ambulance.ref;
+        if(amb && c.dist > amb.dist && c.dist - amb.dist < 220){
+          // Panic acceleration to clear the narrow lane!
+          target = c.maxSpeed * 1.35;
+          c.turnSignal = true;
+        } else {
+          c.turnSignal = false;
+        }
+      }
 
       if(c._crashed && c.crashLife > 0){
         c.crashLife -= dt;
@@ -1240,6 +1300,9 @@
     entities.cars = entities.cars.filter(c => {
       if(c.state === 'done') return false;
       if(c.t >= 1.15){
+        if(entities.ambulance && entities.ambulance.ref === c){
+          entities.ambulance = null;
+        }
         trackEvent('through'); throughCount++;
         return false;
       }
@@ -1250,6 +1313,33 @@
             c.state = 'done';
             pushLog('roadworks', 'Lavori in corso completati: cantiere rimosso, la corsia è libera.');
             return false;
+          }
+        }
+        if(c.isDropOff){
+          c.dropOffLife -= dt;
+          if(!c.passengerSpawned && c.dropOffLife < 12){
+            c.passengerSpawned = true;
+            const carPos = pointOnPath(tract.carPath, c.t);
+            const passengerX = carPos.x + 8 * Math.cos(carPos.angle + Math.PI/2);
+            const passengerY = carPos.y + 8 * Math.sin(carPos.angle + Math.PI/2);
+            const sidewalkX = carPos.x + 22 * Math.cos(carPos.angle + Math.PI/2);
+            const sidewalkY = carPos.y + 22 * Math.sin(carPos.angle + Math.PI/2);
+            const pedPath = [[passengerX, passengerY], [sidewalkX, sidewalkY]];
+            entities.peds.push({
+              path: pedPath,
+              t: 0,
+              dist: 0,
+              baseSpeed: 7,
+              elderly: true,
+              wheelchair: false,
+              crossing: null
+            });
+            pushLog('dropoff', "🚶‍♂️ L'anziano scende dal veicolo ed attraversa lentamente verso il marciapiede.");
+          }
+          if(c.dropOffLife <= 0){
+            c.state = 'driving';
+            c.illegalStop = null;
+            pushLog('dropoff', 'Discesa completata: l\'auto di cortesia riparte liberando la carreggiata.');
           }
         }
         if(entities.van && entities.van.ref === c){
@@ -1634,7 +1724,7 @@
 
 
 
-    const scenarioAllowsImpact = ['delivery_block','vulnerable_users','roadworks'].includes(ui.scenarioSelect.value);
+    const scenarioAllowsImpact = ['delivery_block','vulnerable_users','roadworks','dropoff','ambulance'].includes(ui.scenarioSelect.value);
     const checkPedCrash = (veh, vx, vy, vAngle, vLen, vWid, vname, speed) => {
        if(speed !== undefined && speed < 5) return;
         entities.peds.forEach(p => {
@@ -1834,6 +1924,41 @@
         ctx.fillStyle = '#fef3c7';
         ctx.fillRect(L/2 - 2.5, -W/2 + 2, 2.5, 3); ctx.fillRect(L/2 - 2.5, W/2 - 5, 2.5, 3);
       }
+    } else if(type === 'ambulance'){
+      const grad = ctx.createLinearGradient(0, -W/2, 0, W/2);
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(1, '#f1f5f9');
+      ctx.fillStyle = grad;
+      ctx.strokeStyle = '#dc2626'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(-L/2, -W/2, L, W, 4); ctx.fill(); ctx.stroke();
+      
+      ctx.fillStyle = '#dc2626';
+      ctx.fillRect(-L/2, -W/2 + 2, L, 2.5);
+      ctx.fillRect(-L/2, W/2 - 4.5, L, 2.5);
+      
+      ctx.fillStyle = '#2563eb';
+      ctx.fillRect(-2, -5, 4, 10);
+      ctx.fillRect(-5, -2, 10, 4);
+      
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath(); ctx.roundRect(L/2 - L*0.30, -W/2 + 2.5, L*0.20, W - 5, 1.5); ctx.fill();
+      
+      const blink = (Math.floor(performance.now() / 150) % 2) === 0;
+      if (blink) {
+        ctx.fillStyle = '#06b6d4';
+        ctx.beginPath(); ctx.arc(L/2 - 4, -W/2, 3, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(-L/2 + 4, W/2, 3, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#2563eb';
+        ctx.beginPath(); ctx.arc(L/2 - 4, W/2, 3, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(-L/2 + 4, -W/2, 3, 0, Math.PI*2); ctx.fill();
+      } else {
+        ctx.fillStyle = '#2563eb';
+        ctx.beginPath(); ctx.arc(L/2 - 4, -W/2, 3, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(-L/2 + 4, W/2, 3, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#06b6d4';
+        ctx.beginPath(); ctx.arc(L/2 - 4, W/2, 3, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(-L/2 + 4, -W/2, 3, 0, Math.PI*2); ctx.fill();
+      }
     } else {
       const grad = ctx.createLinearGradient(0, -W/2, 0, W/2);
       grad.addColorStop(0, def.body);
@@ -1904,7 +2029,7 @@
     ctx.restore();
   }
 
-  function drawPed(x,y,wheelchair=false){
+  function drawPed(x,y,wheelchair=false,elderly=false){
     const s = (tract && tract.scale) ? tract.scale : 1.0;
     ctx.save();
     ctx.translate(x,y);
@@ -1917,6 +2042,13 @@
       ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(-3,4,3.5,0,Math.PI*2); ctx.stroke();
       ctx.beginPath(); ctx.arc(3,4,3.5,0,Math.PI*2); ctx.stroke();
+    } else if(elderly) {
+      ctx.fillStyle = '#cbd5e1';
+      ctx.beginPath(); ctx.arc(0,-3.5,2.7,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#d97706';
+      ctx.beginPath(); ctx.roundRect(-2.5,-1,5,7,1.5); ctx.fill();
+      ctx.strokeStyle = '#78350f'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(2,-2); ctx.lineTo(3.5,5); ctx.stroke();
     } else {
       ctx.fillStyle = '#fbbf24';
       ctx.beginPath(); ctx.arc(0,-3,2.5,0,Math.PI*2); ctx.fill();
@@ -2101,7 +2233,11 @@
           drawLight(-7); drawLight(7);
           ctx.restore();
         } else {
-          drawVehicle(p.x, p.y, p.angle, c.type, {braking: c.braking, hazard: c.state==='illegal-stopped', turnSignal: c.turnSignal});
+          drawVehicle(p.x, p.y, p.angle, c.type, {
+            braking: c.braking,
+            hazard: c.state==='illegal-stopped' || c.hazard,
+            turnSignal: c.turnSignal
+          });
         }
       } else if((c.state === 'maneuver-in' || c.state === 'turning-out') && c.maneuver){
         const pos = mPos(c.maneuver);
@@ -2160,7 +2296,7 @@
       ctx.save();
       ctx.globalAlpha = getOpacity(p.t, -0.15, 1.15);
       const pos = pointOnPath(p.path, p.t);
-      drawPed(pos.x, pos.y, p.wheelchair);
+      drawPed(pos.x, pos.y, p.wheelchair, p.elderly);
       ctx.restore();
     });
 
@@ -2214,6 +2350,10 @@
       ui.carFlow.value = 18; ui.bikeFlow.value = 10; ui.pedFlow.value = 14; ui.parkingFlow.value = 45; ui.parkingFill.value = 60;
     } else if (sc === 'roadworks') {
       ui.carFlow.value = 18; ui.bikeFlow.value = 8; ui.pedFlow.value = 12; ui.parkingFlow.value = 20; ui.parkingFill.value = 60;
+    } else if (sc === 'dropoff') {
+      ui.carFlow.value = 22; ui.bikeFlow.value = 8; ui.pedFlow.value = 15; ui.parkingFlow.value = 35; ui.parkingFill.value = 90;
+    } else if (sc === 'ambulance') {
+      ui.carFlow.value = 32; ui.bikeFlow.value = 10; ui.pedFlow.value = 18; ui.parkingFlow.value = 40; ui.parkingFill.value = 65;
     }
     syncSliders();
     if(ui.profileSelect.value !== 'custom') ui.profileSelect.value = 'custom';
