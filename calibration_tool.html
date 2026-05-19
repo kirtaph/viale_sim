@@ -154,7 +154,7 @@ canvas{display:block;cursor:crosshair}
             <option value="disabled">Stallo Disabili</option>
             <option value="moto">Stallo Moto</option>
             <option value="hotspot">Zona Critica</option>
-            <option value="blockage">Furgone</option>
+            <option value="blockage">Ostruzione (Furgone / Cantiere)</option>
           </select>
         </div>
         <input type="text" id="addName" placeholder="Nome (es. Via Rossi)..." style="margin: 4px 0"/>
@@ -380,9 +380,17 @@ function loadTract() {
   syncPropUI();
   const t = defaultTracts[currentKey];
   bgImage = new Image();
-  bgImage.onload = () => { fitZoom(); render(); };
+  bgImage.onload = () => {
+    const scale = bgImage.naturalWidth ? (bgImage.naturalWidth / t.w) : 1;
+    canvas.width = t.w * scale;
+    canvas.height = t.h * scale;
+    fitZoom();
+    render();
+  };
   bgImage.src = t.image;
-  canvas.width = t.w; canvas.height = t.h;
+  // Temporary size until image finishes loading
+  canvas.width = t.w;
+  canvas.height = t.h;
   buildList(); updateRefPanel();
 }
 
@@ -434,7 +442,7 @@ function pathTypeLabel(name) {
   if(name.startsWith('disabled:')) return '♿';
   if(name.startsWith('moto:')) return '🏍️';
   if(name.startsWith('hotspot:')) return '🔥';
-  if(name.startsWith('blockage:')) return '🚚';
+  if(name.startsWith('blockage:')) return '🚧';
   return '?';
 }
 
@@ -505,7 +513,13 @@ mainArea.addEventListener('wheel', e => { e.preventDefault(); zoom*=e.deltaY<0?1
 
 function render() {
   const t = defaultTracts[currentKey];
-  ctx.clearRect(0,0,t.w,t.h);
+  const scale = bgImage.naturalWidth ? (bgImage.naturalWidth / t.w) : 1;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  ctx.save();
+  ctx.scale(scale, scale);
+
   ctx.fillStyle='#f7f3e9'; ctx.fillRect(0,0,t.w,t.h);
   if(bgImage.complete) ctx.drawImage(bgImage,0,0,t.w,t.h);
 
@@ -572,6 +586,8 @@ function render() {
   ctx.shadowBlur = 4; ctx.shadowColor = '#000';
   ctx.fillText('SUV DI RIFERIMENTO (5m)', 0, -sh/2 - 12);
   ctx.restore();
+
+  ctx.restore(); // Restore high-resolution scale context
 }
 
 function canvasXY(e) {

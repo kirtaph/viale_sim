@@ -30,13 +30,12 @@
       <div class="field">
         <label for="scenarioSelect">Scenario</label>
         <select id="scenarioSelect">
-          <option value="peak">Ora di punta</option>
-          <option value="crossing">Pedoni intensi</option>
-          <option value="driveway">Passi carrabili</option>
-          <option value="disabled">Persona disabile</option>
-          <option value="delivery">Furgone in consegna (parcheggia)</option>
-          <option value="block">Sosta selvaggia (furgone in corsia)</option>
-          <option value="slope">Pendenza · bici in difficoltà</option>
+          <option value="standard">Traffico Standard e Regolare</option>
+          <option value="school_peak">Ora di Punta Scolastica (Congestione)</option>
+          <option value="delivery_block">Logistica e Sosta Selvaggia (Furgone)</option>
+          <option value="vulnerable_users">Utenza Debole e Pendenze (Micro-conflitti)</option>
+          <option value="driveway_conflict">Conflitto Accessi Privati (Passi Carrabili)</option>
+          <option value="roadworks">Cantiere Stradale (Lavori in Corso)</option>
         </select>
       </div>
       <div class="field">
@@ -87,7 +86,6 @@
         <button class="btnPrimary" id="pauseBtn">⏸ Pausa</button>
         <button class="btnGhost" id="resetBtn">↻ Reset</button>
       </div>
-      <button id="calibrateBtn" class="btnAccent">🎯 Apri calibratore</button>
 
       <div class="miniLegend">
         <div class="legendItem"><span class="legendSwatch" style="background:#3b82f6"></span> city car</div>
@@ -148,6 +146,6 @@
 </div>
 
 <script src="src/data.js"></script>
-<script src="src/simulator.js?v=11"></script>
+<script src="src/simulator.js?v=12"></script>
 </body>
 </html>

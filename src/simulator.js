@@ -97,8 +97,9 @@
     const wrap = document.querySelector('.stageWrap');
     if (!wrap) return;
     const rect = wrap.getBoundingClientRect();
-    stage.width = rect.width;
-    stage.height = rect.height;
+    const dpr = window.devicePixelRatio || 1;
+    stage.width = rect.width * dpr;
+    stage.height = rect.height * dpr;
   }
   window.addEventListener('resize', updateCanvasSize);
   
@@ -276,7 +277,7 @@
   function carBaseSpeed(){ return pathTotalLength(tract.carPath) / 14; }
   function bikeBaseSpeed(){
     let s = pathTotalLength(tract.bikePathFwd) / 18;
-    if(ui.scenarioSelect.value === 'slope'){
+    if(ui.scenarioSelect.value === 'vulnerable_users'){
       if(tract.key === 'H') s *= 0.5;
       else if(tract.key === 'G') s *= 0.65;
       else if(tract.key === 'F') s *= 0.85;
@@ -620,6 +621,7 @@
     const s = (tract && tract.scale) ? tract.scale : 1.0;
     const crossing = tract.crossings[Math.floor(rand(0,tract.crossings.length))];
     const path = crossing.walkPath;
+    if(!path || !path.length) return;
     const dir = Math.random() < .5 ? 1 : -1;
     const ordered = dir === 1 ? path : [...path].reverse();
     entities.peds.push({
@@ -685,6 +687,34 @@
     pushLog('block', 'Furgone in arrivo per sosta selvaggia.', 'crash');
     return true;
   }
+  function spawnRoadworks(){
+    if(entities.cars.some(c => c.isRoadworks)) return false;
+    if(!tract.blockage || tract.blockage.x === 0) return false;
+    const blockNearT = nearestCarT({x:tract.blockage.x, y:tract.blockage.y}).t;
+    const tooClose = entities.cars.some(c => (c.state === 'driving' || c.state === 'illegal-stopped') && c.dist < 110 && c.dist > -5);
+    if(tooClose) return false;
+    const carPathLen = pathTotalLength(tract.carPath);
+    const w = {
+      id: 'roadworks_' + Math.random(),
+      type: 'truck',
+      state: 'illegal-stopped',
+      t: blockNearT,
+      dist: blockNearT * carPathLen,
+      speed: 0,
+      length: 24,
+      width: 14,
+      decel: 4,
+      accel: 1,
+      braking: false,
+      _crashed: false,
+      isRoadworks: true,
+      roadworksLife: rand(15, 25)
+    };
+    entities.cars.push(w);
+    pushLog('roadworks', '⚠️ Attenzione: Cantiere stradale mobile (lavori in corso) sulla carreggiata.', 'crash');
+    addFlash(tract.blockage.x, tract.blockage.y, 32, 'CANTIERE STRADALE', 'rgba(234,179,8,.85)');
+    return true;
+  }
 
   function manageSpawns(dt){
     const scenario = ui.scenarioSelect.value;
@@ -705,21 +735,25 @@
     const pedRate = Number(ui.pedFlow.value);
     if(spawners.ped <= 0 && pedRate > 0 && tract.crossings.length){ spawnPed(); spawners.ped = 60 / pedRate; }
 
-    if((scenario==='driveway' || scenario==='peak') && spawners.driveway <= 0){
+    if((scenario==='driveway_conflict' || scenario==='school_peak') && spawners.driveway <= 0){
        spawnDrivewayCar();
-       spawners.driveway = scenario==='driveway' ? rand(25, 50) : rand(70, 150);
+       spawners.driveway = scenario==='driveway_conflict' ? rand(15, 30) : rand(50, 100);
     }
-    if((scenario==='peak' || scenario==='crossing') && spawners.side <= 0 && tract.sideStreets){
-       spawnSideStreetCar(); spawners.side = rand(8, 18);
+    if((scenario==='school_peak' || scenario==='driveway_conflict') && spawners.side <= 0 && tract.sideStreets){
+       spawnSideStreetCar(); spawners.side = rand(6, 12);
     }
-    if(scenario==='disabled' && spawners.special <= 0 && tract.disabled.length){
+    if(scenario==='vulnerable_users' && spawners.special <= 0 && tract.disabled.length){
        spawnDisabledUser(); spawners.special = rand(15, 30);
     }
-    if(scenario==='delivery' && spawners.delivery <= 0){
+    if(scenario==='delivery_block' && spawners.delivery <= 0){
        spawnDeliveryVan(); spawners.delivery = rand(20, 40);
     }
-    if(scenario==='block' && spawners.special <= 0){
+    if(scenario==='delivery_block' && spawners.special <= 0){
        if(spawnBlockingVan()) spawners.special = rand(25, 50);
+       else spawners.special = 1;
+    }
+    if(scenario==='roadworks' && spawners.special <= 0){
+       if(spawnRoadworks()) spawners.special = rand(25, 45);
        else spawners.special = 1;
     }
 
@@ -1210,6 +1244,14 @@
         return false;
       }
       if(c.state === 'illegal-stopped'){
+        if(c.isRoadworks){
+          c.roadworksLife -= dt;
+          if(c.roadworksLife <= 0){
+            c.state = 'done';
+            pushLog('roadworks', 'Lavori in corso completati: cantiere rimosso, la corsia è libera.');
+            return false;
+          }
+        }
         if(entities.van && entities.van.ref === c){
           entities.van.life -= dt;
           if(entities.van.life <= 0){
@@ -1287,7 +1329,7 @@
       }
 
       for(const p of entities.peds){
-        if(p.t > 0 && p.t < 1 && p.crossing.intersectsBikePath){
+        if(p.t > 0 && p.t < 1 && p.crossing && p.crossing.intersectsBikePath){
           const pPos = pointOnPath(p.path, p.t);
           const dx = pPos.x - bp.x;
           const dy = pPos.y - bp.y;
@@ -1592,7 +1634,7 @@
 
 
 
-    const scenarioAllowsImpact = ['block','delivery','disabled'].includes(ui.scenarioSelect.value);
+    const scenarioAllowsImpact = ['delivery_block','vulnerable_users','roadworks'].includes(ui.scenarioSelect.value);
     const checkPedCrash = (veh, vx, vy, vAngle, vLen, vWid, vname, speed) => {
        if(speed !== undefined && speed < 5) return;
         entities.peds.forEach(p => {
@@ -1916,6 +1958,9 @@
     ctx.clearRect(0,0,stage.width,stage.height);
     
     ctx.save();
+    const dpr = window.devicePixelRatio || 1;
+    ctx.scale(dpr, dpr);
+    
     // Apply Camera
     ctx.translate(cam.x, cam.y);
     ctx.scale(cam.zoom, cam.zoom);
@@ -2014,7 +2059,50 @@
       ctx.globalAlpha = getOpacity(c.t, -0.15, 1.15);
       if(c.state === 'driving' || c.state === 'illegal-stopped'){
         const p = pointOnPath(tract.carPath, c.t);
-        drawVehicle(p.x, p.y, p.angle, c.type, {braking: c.braking, hazard: c.state==='illegal-stopped', turnSignal: c.turnSignal});
+        if (c.isRoadworks) {
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.angle);
+          
+          ctx.fillStyle = 'rgba(234,179,8,0.15)';
+          ctx.beginPath(); ctx.roundRect(-20, -12, 40, 24, 4); ctx.fill();
+          ctx.strokeStyle = '#eab308'; ctx.lineWidth = 1.5;
+          ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
+          
+          const drawCone = (cx, cy) => {
+            ctx.save(); ctx.translate(cx, cy);
+            ctx.fillStyle = 'rgba(15,23,42,0.2)';
+            ctx.beginPath(); ctx.ellipse(0, 1.5, 3.5, 1.5, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#ea580c'; ctx.fillRect(-3, -1, 6, 2);
+            ctx.beginPath(); ctx.moveTo(-2, -1); ctx.lineTo(-0.8, -6); ctx.lineTo(0.8, -6); ctx.lineTo(2, -1); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath(); ctx.moveTo(-1.4, -3); ctx.lineTo(-1.1, -4.5); ctx.lineTo(1.1, -4.5); ctx.lineTo(1.4, -3); ctx.closePath(); ctx.fill();
+            ctx.restore();
+          };
+          drawCone(-16, -9); drawCone(16, -9); drawCone(-16, 9); drawCone(16, 9);
+          
+          ctx.fillStyle = 'rgba(15,23,42,0.25)'; ctx.fillRect(-12, -7, 24, 15);
+          ctx.fillStyle = '#f8fafc'; ctx.fillRect(-11, -6, 22, 10);
+          ctx.fillStyle = '#dc2626';
+          for (let sx = -9; sx <= 9; sx += 4.5) {
+            ctx.beginPath(); ctx.moveTo(sx - 1.5, -6); ctx.lineTo(sx + 1, 4); ctx.lineTo(sx + 2.5, 4); ctx.lineTo(sx, -6); ctx.closePath(); ctx.fill();
+          }
+          
+          const blink = (Math.floor(performance.now() / 250) % 2) === 0;
+          const drawLight = (lx) => {
+            ctx.fillStyle = '#334155'; ctx.fillRect(lx - 1, -10, 2, 4);
+            ctx.fillStyle = blink ? '#fbbf24' : '#d97706';
+            ctx.beginPath(); ctx.arc(lx, -11, 2.5, 0, Math.PI*2); ctx.fill();
+            if (blink) {
+              ctx.fillStyle = 'rgba(251,191,36,0.3)';
+              ctx.beginPath(); ctx.arc(lx, -11, 7, 0, Math.PI*2); ctx.fill();
+            }
+          };
+          drawLight(-7); drawLight(7);
+          ctx.restore();
+        } else {
+          drawVehicle(p.x, p.y, p.angle, c.type, {braking: c.braking, hazard: c.state==='illegal-stopped', turnSignal: c.turnSignal});
+        }
       } else if((c.state === 'maneuver-in' || c.state === 'turning-out') && c.maneuver){
         const pos = mPos(c.maneuver);
         drawVehicle(pos.x, pos.y, mHeading(c.maneuver), c.type, {braking:true, turnSignal: c.state === 'turning-out'});
@@ -2113,6 +2201,23 @@
   ui.profileSelect.addEventListener('change', () => applyProfile(ui.profileSelect.value));
   ui.tractSelect.addEventListener('change', () => { renderTexts(); resetScene(true); });
   ui.scenarioSelect.addEventListener('change', () => {
+    const sc = ui.scenarioSelect.value;
+    if (sc === 'standard') {
+      ui.carFlow.value = 15; ui.bikeFlow.value = 6; ui.pedFlow.value = 8; ui.parkingFlow.value = 30; ui.parkingFill.value = 60;
+    } else if (sc === 'school_peak') {
+      ui.carFlow.value = 40; ui.bikeFlow.value = 12; ui.pedFlow.value = 35; ui.parkingFlow.value = 65; ui.parkingFill.value = 80;
+    } else if (sc === 'delivery_block') {
+      ui.carFlow.value = 20; ui.bikeFlow.value = 6; ui.pedFlow.value = 12; ui.parkingFlow.value = 40; ui.parkingFill.value = 70;
+    } else if (sc === 'vulnerable_users') {
+      ui.carFlow.value = 14; ui.bikeFlow.value = 18; ui.pedFlow.value = 25; ui.parkingFlow.value = 25; ui.parkingFill.value = 65;
+    } else if (sc === 'driveway_conflict') {
+      ui.carFlow.value = 18; ui.bikeFlow.value = 10; ui.pedFlow.value = 14; ui.parkingFlow.value = 45; ui.parkingFill.value = 60;
+    } else if (sc === 'roadworks') {
+      ui.carFlow.value = 18; ui.bikeFlow.value = 8; ui.pedFlow.value = 12; ui.parkingFlow.value = 20; ui.parkingFill.value = 60;
+    }
+    syncSliders();
+    if(ui.profileSelect.value !== 'custom') ui.profileSelect.value = 'custom';
+    
     ui.scenarioChip.textContent = ui.scenarioSelect.options[ui.scenarioSelect.selectedIndex].text;
     resetScene(false);
   });
@@ -2121,10 +2226,6 @@
     ui.pauseBtn.textContent = paused ? '▶ Riprendi' : '⏸ Pausa';
   });
   ui.resetBtn.addEventListener('click', () => resetScene(true));
-
-  document.getElementById('calibrateBtn').addEventListener('click', () => {
-    window.open('calibration_tool.html?tract=' + ui.tractSelect.value, '_blank');
-  });
 
   document.getElementById('fullscreenBtn').addEventListener('click', () => {
     const wrap = document.querySelector('.stageWrap');
@@ -2173,9 +2274,9 @@
       resetCamera();
     }, 150);
   });
-  window.addEventListener('storage', (e) => {
+  window.addEventListener('storage', async (e) => {
     if (e.key && e.key.startsWith('viale_tract_')) {
-      loadCalibrationData();
+      await loadCalibrationData();
       normalizeBikePaths();
       renderTexts();
       resetScene(false);
