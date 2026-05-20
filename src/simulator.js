@@ -8,7 +8,8 @@
    'pauseBtn','resetBtn','tractTitle','tractDescription',
    'slopeChip','orientationChip','scenarioChip','stallsChip',
    'bugList','logBox',
-   'statCrashes','statBrakes','statNearMisses','statParked','statParkedSub','statThrough','statThroughSub'
+   'statCrashes','statBrakes','statNearMisses','statParked','statParkedSub','statThrough','statThroughSub',
+   'hudCO2','hudActive','hudSpeed','scenarioGrid'
   ].forEach(k => ui[k] = document.getElementById(k));
 
   const { tractDefs, tractOrder, VEHICLE_TYPES, PROFILES } = window.VialeData;
@@ -88,6 +89,7 @@
   let stats = {crashes:0, nearMisses:0};
   let eventHistory = []; 
   let throughCount = 0;
+  let excessCO2 = 0;
   
   let cam = { x: 0, y: 0, zoom: 1 };
   let isPanning = false;
@@ -229,6 +231,22 @@
     let a = Math.atan2(tan.y, tan.x);
     if(p.reversed) a += Math.PI;
     return a;
+  }
+  function getMergingCarPos(e){
+    const t = Math.min(1, Math.max(0, e.mergeAnimT || 0));
+    const dist = Math.hypot(e.mergeEnd.x - e.mergeStart.x, e.mergeEnd.y - e.mergeStart.y) || 1;
+    const L1 = dist * 0.45;
+    const P1x = e.mergeStart.x + Math.cos(e.mergeAngle0) * L1;
+    const P1y = e.mergeStart.y + Math.sin(e.mergeAngle0) * L1;
+    const L2 = dist * 0.45;
+    const P2x = e.mergeEnd.x - Math.cos(e.mergeAngle1) * L2;
+    const P2y = e.mergeEnd.y - Math.sin(e.mergeAngle1) * L2;
+    const mt = 1 - t;
+    const x = mt*mt*mt * e.mergeStart.x + 3 * mt*mt*t * P1x + 3 * mt*t*t * P2x + t*t*t * e.mergeEnd.x;
+    const y = mt*mt*mt * e.mergeStart.y + 3 * mt*mt*t * P1y + 3 * mt*t*t * P2y + t*t*t * e.mergeEnd.y;
+    const dx = 3*mt*mt * (P1x - e.mergeStart.x) + 6*mt*t * (P2x - P1x) + 3*t*t * (e.mergeEnd.x - P2x);
+    const dy = 3*mt*mt * (P1y - e.mergeStart.y) + 6*mt*t * (P2y - P1y) + 3*t*t * (e.mergeEnd.y - P2y);
+    return { x, y, angle: Math.atan2(dy, dx) };
   }
   function mAdvance(m, dt){
     const phase = m.phases[m.phaseIdx];
@@ -423,6 +441,7 @@
     if(full){
       stats = {crashes:0, nearMisses:0};
       eventHistory = []; throughCount = 0;
+      excessCO2 = 0;
       ui.logBox.innerHTML='';
     }
     parkingSlots = buildParkingSlots();
@@ -554,6 +573,36 @@
     const dCount = parkingSlots.filter(s => s.type==='disabled').length;
     const mCount = parkingSlots.filter(s => s.type==='moto').length;
     ui.stallsChip.textContent = `${parkingSlots.length} (${dCount} dis., ${mCount} moto)`;
+
+    // Update Floating HUD elements
+    if (ui.hudCO2) {
+      if (excessCO2 < 1000) {
+        ui.hudCO2.textContent = `${excessCO2.toFixed(1)} g`;
+      } else {
+        ui.hudCO2.textContent = `${(excessCO2 / 1000).toFixed(3)} kg`;
+      }
+    }
+    if (ui.hudActive) {
+      const activeCount = entities.cars.filter(c => c.state === 'driving' && c.t > 0 && c.t < 1).length +
+                          entities.bikes.filter(b => b.t > 0 && b.t < 1).length +
+                          entities.sideCars.filter(sc => sc.state !== 'done').length +
+                          entities.drivewayCars.filter(dc => dc.state !== 'done').length;
+      ui.hudActive.textContent = `${activeCount} veic.`;
+    }
+    if (ui.hudSpeed) {
+      const activeCars = entities.cars.filter(c => c.state === 'driving' && c.t > 0 && c.t < 1);
+      let avgSpeedKmh = 0;
+      if (activeCars.length > 0) {
+        let totalSpeed = 0;
+        activeCars.forEach(c => {
+          totalSpeed += (c.speed / carBaseSpeed()) * 40;
+        });
+        avgSpeedKmh = totalSpeed / activeCars.length;
+      } else {
+        avgSpeedKmh = 40; // Default when empty
+      }
+      ui.hudSpeed.textContent = `${avgSpeedKmh.toFixed(1)} km/h`;
+    }
   }
 
   function makeCar(opts={}){
@@ -1435,9 +1484,8 @@
           const ep = pointOnPath(e.path, e.t);
           checkProximity(ep.x, ep.y, halfL);
         } else if(e.state === 'merging'){
-          const ex = lerp(e.mergeStart.x, e.mergeEnd.x, e.mergeAnimT);
-          const ey = lerp(e.mergeStart.y, e.mergeEnd.y, e.mergeAnimT);
-          checkProximity(ex, ey, halfL);
+          const pos = getMergingCarPos(e);
+          checkProximity(pos.x, pos.y, halfL);
         }
       };
       entities.drivewayCars.forEach(checkSide);
@@ -1525,30 +1573,9 @@
           const def = VEHICLE_TYPES[v.type] || {length:30, width:16};
           let vPos, vAngle;
           if(v.state === 'merging'){
-            const t = Math.min(1, Math.max(0, v.mergeAnimT));
-            const dist = Math.hypot(v.mergeEnd.x - v.mergeStart.x, v.mergeEnd.y - v.mergeStart.y) || 1;
-            
-            // Control Point 1 (along side-street direction)
-            const L1 = dist * 0.45;
-            const P1x = v.mergeStart.x + Math.cos(v.mergeAngle0) * L1;
-            const P1y = v.mergeStart.y + Math.sin(v.mergeAngle0) * L1;
-            
-            // Control Point 2 (along main road direction, backwards from mergeEnd)
-            const L2 = dist * 0.45;
-            const P2x = v.mergeEnd.x - Math.cos(v.mergeAngle1) * L2;
-            const P2y = v.mergeEnd.y - Math.sin(v.mergeAngle1) * L2;
-            
-            // Cubic Bezier position
-            const mt = 1 - t;
-            vPos = {
-              x: mt*mt*mt * v.mergeStart.x + 3 * mt*mt*t * P1x + 3 * mt*t*t * P2x + t*t*t * v.mergeEnd.x,
-              y: mt*mt*mt * v.mergeStart.y + 3 * mt*mt*t * P1y + 3 * mt*t*t * P2y + t*t*t * v.mergeEnd.y
-            };
-            
-            // Tangent angle
-            const dx = 3*mt*mt * (P1x - v.mergeStart.x) + 6*mt*t * (P2x - P1x) + 3*t*t * (v.mergeEnd.x - P2x);
-            const dy = 3*mt*mt * (P1y - v.mergeStart.y) + 6*mt*t * (P2y - P1y) + 3*t*t * (v.mergeEnd.y - P2y);
-            vAngle = Math.atan2(dy, dx);
+            const pos = getMergingCarPos(v);
+            vPos = pos;
+            vAngle = pos.angle;
           } else if(v.state === 'driving' || v.state === 'travelling' || v.state === 'yielding' || v.state === 'illegal-stopped'){
              const path = v.path || tract.carPath;
              vPos = pointOnPath(path, v.t);
@@ -1888,15 +1915,9 @@
            checkPedCrash(e, ep.x, ep.y, ep.angle, def.length, def.width, def.name, e.baseSpeed);
            checkBikeCrash(e, ep.x, ep.y, ep.angle, def.length, def.width, def.name, e.baseSpeed);
         } else if(e.state === 'merging'){
-           const x = lerp(e.mergeStart.x, e.mergeEnd.x, e.mergeAnimT);
-           const y = lerp(e.mergeStart.y, e.mergeEnd.y, e.mergeAnimT);
-           const aDiff = e.mergeAngle1 - e.mergeAngle0;
-           let angle = e.mergeAngle0 + aDiff * e.mergeAnimT;
-           if(aDiff > Math.PI) angle = e.mergeAngle0 + (aDiff - Math.PI*2)*e.mergeAnimT;
-           if(aDiff < -Math.PI) angle = e.mergeAngle0 + (aDiff + Math.PI*2)*e.mergeAnimT;
-           
-           checkPedCrash(e, x, y, angle, def.length, def.width, def.name, e.baseSpeed);
-           checkBikeCrash(e, x, y, angle, def.length, def.width, def.name, e.baseSpeed);
+           const pos = getMergingCarPos(e);
+           checkPedCrash(e, pos.x, pos.y, pos.angle, def.length, def.width, def.name, e.baseSpeed);
+           checkBikeCrash(e, pos.x, pos.y, pos.angle, def.length, def.width, def.name, e.baseSpeed);
         }
       });
     };
@@ -1935,6 +1956,29 @@
 
     flashes.forEach(f => f.life -= dt * 1.4);
     flashes = flashes.filter(f => f.life > 0);
+
+    // Idle CO2 emissions calculation
+    entities.cars.forEach(c => {
+      if ((c.state === 'driving' || c.state === 'illegal-stopped') && c.t > 0 && c.t < 1 && c.speed < 2.0) {
+        const rates = {citycar: 0.45, suv: 0.65, van: 0.90, truck: 1.40, motorbike: 0.20, ambulance: 0.80};
+        const rate = rates[c.type] || 0.45;
+        excessCO2 += rate * dt;
+      }
+    });
+    entities.sideCars.forEach(sc => {
+      if (sc.state === 'yielding' || (sc.state === 'travelling' && sc.t > 0 && sc.speed < 2.0)) {
+        const rates = {citycar: 0.45, suv: 0.65, van: 0.90, truck: 1.40, motorbike: 0.20, ambulance: 0.80};
+        const rate = rates[sc.type] || 0.45;
+        excessCO2 += rate * dt;
+      }
+    });
+    entities.drivewayCars.forEach(dc => {
+      if (dc.state === 'yielding' || (dc.state === 'travelling' && dc.t > 0 && dc.speed < 2.0)) {
+        const rates = {citycar: 0.45, suv: 0.65, van: 0.90, truck: 1.40, motorbike: 0.20, ambulance: 0.80};
+        const rate = rates[dc.type] || 0.45;
+        excessCO2 += rate * dt;
+      }
+    });
 
     updateStats();
   }
@@ -2270,7 +2314,7 @@
     ctx.translate(cam.x, cam.y);
     ctx.scale(cam.zoom, cam.zoom);
     
-    ctx.fillStyle = '#fafbfc';
+    ctx.fillStyle = '#0d111d';
     ctx.fillRect(0,0,tract.width,tract.height);
     if(ui.showImage.checked && img.complete){
       ctx.save(); ctx.globalAlpha = 0.85;
@@ -2427,30 +2471,8 @@
         const p = pointOnPath(e.path, e.t);
         drawVehicle(p.x, p.y, p.angle, e.type, {braking: e.state==='yielding' || e.yieldingToBike, customColors: e.customColors});
       } else if(e.state === 'merging'){
-        const t = Math.min(1, Math.max(0, e.mergeAnimT));
-        const dist = Math.hypot(e.mergeEnd.x - e.mergeStart.x, e.mergeEnd.y - e.mergeStart.y) || 1;
-        
-        // Control Point 1 (along side-street direction)
-        const L1 = dist * 0.45;
-        const P1x = e.mergeStart.x + Math.cos(e.mergeAngle0) * L1;
-        const P1y = e.mergeStart.y + Math.sin(e.mergeAngle0) * L1;
-        
-        // Control Point 2 (along main road direction, backwards from mergeEnd)
-        const L2 = dist * 0.45;
-        const P2x = e.mergeEnd.x - Math.cos(e.mergeAngle1) * L2;
-        const P2y = e.mergeEnd.y - Math.sin(e.mergeAngle1) * L2;
-        
-        // Cubic Bezier position
-        const mt = 1 - t;
-        const x = mt*mt*mt * e.mergeStart.x + 3 * mt*mt*t * P1x + 3 * mt*t*t * P2x + t*t*t * e.mergeEnd.x;
-        const y = mt*mt*mt * e.mergeStart.y + 3 * mt*mt*t * P1y + 3 * mt*t*t * P2y + t*t*t * e.mergeEnd.y;
-        
-        // Tangent derivative for natural wheel alignment
-        const dx = 3*mt*mt * (P1x - e.mergeStart.x) + 6*mt*t * (P2x - P1x) + 3*t*t * (e.mergeEnd.x - P2x);
-        const dy = 3*mt*mt * (P1y - e.mergeStart.y) + 6*mt*t * (P2y - P1y) + 3*t*t * (e.mergeEnd.y - P2y);
-        const a = Math.atan2(dy, dx);
-        
-        drawVehicle(x, y, a, e.type, {customColors: e.customColors});
+        const pos = getMergingCarPos(e);
+        drawVehicle(pos.x, pos.y, pos.angle, e.type, {customColors: e.customColors});
       }
       ctx.restore();
     };
@@ -2468,30 +2490,8 @@
           drawVehicle(p.x, p.y, p.angle, e.type, {braking: e.state==='yielding' || e.yieldingToBike, customColors: e.customColors});
         }
       } else if(e.state === 'merging'){
-        const t = Math.min(1, Math.max(0, e.mergeAnimT));
-        const dist = Math.hypot(e.mergeEnd.x - e.mergeStart.x, e.mergeEnd.y - e.mergeStart.y) || 1;
-        
-        // Control Point 1 (along side-street direction)
-        const L1 = dist * 0.45;
-        const P1x = e.mergeStart.x + Math.cos(e.mergeAngle0) * L1;
-        const P1y = e.mergeStart.y + Math.sin(e.mergeAngle0) * L1;
-        
-        // Control Point 2 (along main road direction, backwards from mergeEnd)
-        const L2 = dist * 0.45;
-        const P2x = e.mergeEnd.x - Math.cos(e.mergeAngle1) * L2;
-        const P2y = e.mergeEnd.y - Math.sin(e.mergeAngle1) * L2;
-        
-        // Cubic Bezier position
-        const mt = 1 - t;
-        const x = mt*mt*mt * e.mergeStart.x + 3 * mt*mt*t * P1x + 3 * mt*t*t * P2x + t*t*t * e.mergeEnd.x;
-        const y = mt*mt*mt * e.mergeStart.y + 3 * mt*mt*t * P1y + 3 * mt*t*t * P2y + t*t*t * e.mergeEnd.y;
-        
-        // Tangent derivative for natural wheel alignment
-        const dx = 3*mt*mt * (P1x - e.mergeStart.x) + 6*mt*t * (P2x - P1x) + 3*t*t * (e.mergeEnd.x - P2x);
-        const dy = 3*mt*mt * (P1y - e.mergeStart.y) + 6*mt*t * (P2y - P1y) + 3*t*t * (e.mergeEnd.y - P2y);
-        const a = Math.atan2(dy, dx);
-        
-        drawVehicle(x, y, a, e.type, {customColors: e.customColors});
+        const pos = getMergingCarPos(e);
+        drawVehicle(pos.x, pos.y, pos.angle, e.type, {customColors: e.customColors});
       }
       ctx.restore();
     });
@@ -2571,6 +2571,18 @@
     if(ui.profileSelect.value !== 'custom') ui.profileSelect.value = 'custom';
     
     ui.scenarioChip.textContent = ui.scenarioSelect.options[ui.scenarioSelect.selectedIndex].text;
+    
+    // Synchronize active class on visual scenario cards
+    if (ui.scenarioGrid) {
+      ui.scenarioGrid.querySelectorAll('.scenario-card').forEach(card => {
+        if (card.getAttribute('data-value') === sc) {
+          card.classList.add('active');
+        } else {
+          card.classList.remove('active');
+        }
+      });
+    }
+    
     resetScene(false);
   });
   ui.pauseBtn.addEventListener('click', () => {
@@ -2633,6 +2645,102 @@
       renderTexts();
       resetScene(false);
     }
+  });
+
+  const scenarioIcons = {
+    standard: '🟢',
+    school_peak: '🏫',
+    delivery_block: '🚚',
+    vulnerable_users: '🚶',
+    driveway_conflict: '🚗',
+    roadworks: '⚠️',
+    dropoff: '🧓',
+    ambulance: '🚑'
+  };
+  const scenarioShortDescs = {
+    standard: 'Flusso diurno regolare e ben bilanciato.',
+    school_peak: 'Ingresso/uscita scuole, traffico intenso.',
+    delivery_block: 'Sosta in seconda fila e deviazioni.',
+    vulnerable_users: 'Utenza debole, pendenze e bici a rilento.',
+    driveway_conflict: 'Immissioni e precedenze dai passi carrabili.',
+    roadworks: 'Cantiere mobile e senso alternato di fatto.',
+    dropoff: 'Fermata improvvisa cortesia passeggero.',
+    ambulance: 'Mezzo di soccorso prioritario in emergenza.'
+  };
+
+  function buildScenarioCards() {
+    if (!ui.scenarioGrid || !ui.scenarioSelect) return;
+    ui.scenarioGrid.innerHTML = '';
+    
+    const options = Array.from(ui.scenarioSelect.options);
+    options.forEach(opt => {
+      const val = opt.value;
+      const label = opt.textContent;
+      const icon = scenarioIcons[val] || '⚙️';
+      const desc = scenarioShortDescs[val] || '';
+      
+      const card = document.createElement('div');
+      card.className = `scenario-card${val === ui.scenarioSelect.value ? ' active' : ''}`;
+      card.setAttribute('data-value', val);
+      card.innerHTML = `
+        <div class="sc-icon">${icon}</div>
+        <div class="sc-info">
+          <div class="sc-title">${label}</div>
+          <div class="sc-desc">${desc}</div>
+        </div>
+      `;
+      card.addEventListener('click', () => {
+        ui.scenarioGrid.querySelectorAll('.scenario-card').forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+        ui.scenarioSelect.value = val;
+        ui.scenarioSelect.dispatchEvent(new Event('change'));
+      });
+      ui.scenarioGrid.appendChild(card);
+    });
+  }
+
+  buildScenarioCards();
+
+  // Sidebar show/hide toggle with layout resize hook
+  const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
+  const layout = document.querySelector('.layout');
+  if (sidebarToggleBtn && layout) {
+    sidebarToggleBtn.addEventListener('click', () => {
+      layout.classList.toggle('sidebar-hidden');
+      if (layout.classList.contains('sidebar-hidden')) {
+        sidebarToggleBtn.innerHTML = '☰';
+        sidebarToggleBtn.title = "Mostra controlli";
+      } else {
+        sidebarToggleBtn.innerHTML = '✕';
+        sidebarToggleBtn.title = "Nascondi controlli";
+      }
+      
+      // Dynamic canvas sizing during sliding animation for a premium liquid resize effect
+      let count = 0;
+      const interval = setInterval(() => {
+        updateCanvasSize();
+        count++;
+        if (count > 25) clearInterval(interval);
+      }, 16);
+    });
+
+    layout.addEventListener('transitionend', (e) => {
+      if (e.propertyName === 'grid-template-columns' || e.propertyName === 'gap') {
+        updateCanvasSize();
+      }
+    });
+  }
+
+  // Collapsible sidebar headers click binding
+  const collapsibleHeaders = document.querySelectorAll('.collapsible-header');
+  collapsibleHeaders.forEach(hdr => {
+    hdr.addEventListener('click', () => {
+      hdr.classList.toggle('collapsed');
+      const content = hdr.nextElementSibling;
+      if (content && content.classList.contains('collapsible-content')) {
+        content.classList.toggle('collapsed');
+      }
+    });
   });
 
   ui.tractSelect.value = 'D';

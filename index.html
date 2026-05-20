@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Simulazione viale - V.le Martiri d'Ungheria, Ginosa</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="src/style.css" />
 </head>
 <body>
@@ -19,94 +22,104 @@
       <span class="badge">collisioni evitate</span>
     </div>
   </section>
-
+  
   <div class="layout">
-    <aside class="panel">
-      <h2>Tratto</h2>
-      <div class="field">
-        <label for="tractSelect">Tavola</label>
-        <select id="tractSelect"></select>
-      </div>
-      <div class="field">
-        <label for="scenarioSelect">Scenario</label>
-        <select id="scenarioSelect">
-          <option value="standard">Traffico Standard e Regolare</option>
-          <option value="school_peak">Ora di Punta Scolastica (Congestione)</option>
-          <option value="delivery_block">Logistica e Sosta Selvaggia (Furgone)</option>
-          <option value="vulnerable_users">Utenza Debole e Pendenze (Micro-conflitti)</option>
-          <option value="driveway_conflict">Conflitto Accessi Privati (Passi Carrabili)</option>
-          <option value="roadworks">Cantiere Stradale (Lavori in Corso)</option>
-          <option value="dropoff">Discesa Anziano (Fermata Cortesia)</option>
-          <option value="ambulance">Passaggio Ambulanza in Emergenza</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="profileSelect">Profilo di domanda</label>
-        <select id="profileSelect">
-          <option value="custom">Personalizzato</option>
-          <option value="quiet">Notte / festivo</option>
-          <option value="morning">Mattina feriale (7–9)</option>
-          <option value="midday">Pranzo (12–14)</option>
-          <option value="evening">Sera feriale (17–20)</option>
-          <option value="weekend">Sabato pomeriggio</option>
-        </select>
-      </div>
-
-      <h2>Flussi</h2>
-      <div class="field">
-        <label>Auto · veic/min</label>
-        <div class="sliderWrap"><input id="carFlow" type="range" min="0" max="60" value="15"><div class="valueBox" id="carFlowVal">15</div></div>
-      </div>
-      <div class="field">
-        <label>Bici · bici/min</label>
-        <div class="sliderWrap"><input id="bikeFlow" type="range" min="0" max="40" value="8"><div class="valueBox" id="bikeFlowVal">8</div></div>
-      </div>
-      <div class="field">
-        <label>Pedoni · ped/min</label>
-        <div class="sliderWrap"><input id="pedFlow" type="range" min="0" max="50" value="10"><div class="valueBox" id="pedFlowVal">10</div></div>
-      </div>
-      <div class="field">
-        <label>Manovre parcheggio · /h</label>
-        <div class="sliderWrap"><input id="parkingFlow" type="range" min="0" max="120" value="40"><div class="valueBox" id="parkingFlowVal">40</div></div>
-      </div>
-      <div class="field">
-        <label>Occupazione iniziale parcheggi (%)</label>
-        <div class="sliderWrap"><input id="parkingFill" type="range" min="0" max="100" value="65"><div class="valueBox" id="parkingFillVal">65</div></div>
+    <aside class="panel" id="sidebar">
+      <h2 class="collapsible-header">Tratto <span class="chevron">▼</span></h2>
+      <div class="collapsible-content">
+        <div class="field">
+          <label for="tractSelect">Tavola</label>
+          <select id="tractSelect"></select>
+        </div>
+        <div class="field">
+          <label>Scenario</label>
+          <select id="scenarioSelect" style="display: none;">
+            <option value="standard">Traffico Standard e Regolare</option>
+            <option value="school_peak">Ora di Punta Scolastica (Congestione)</option>
+            <option value="delivery_block">Logistica e Sosta Selvaggia (Furgone)</option>
+            <option value="vulnerable_users">Utenza Debole e Pendenze (Micro-conflitti)</option>
+            <option value="driveway_conflict">Conflitto Accessi Privati (Passi Carrabili)</option>
+            <option value="roadworks">Cantiere Stradale (Lavori in Corso)</option>
+            <option value="dropoff">Discesa Anziano (Fermata Cortesia)</option>
+            <option value="ambulance">Passaggio Ambulanza in Emergenza</option>
+          </select>
+          <div class="scenario-grid" id="scenarioGrid"></div>
+        </div>
+        <div class="field">
+          <label for="profileSelect">Profilo di domanda</label>
+          <select id="profileSelect">
+            <option value="custom">Personalizzato</option>
+            <option value="quiet">Notte / festivo</option>
+            <option value="morning">Mattina feriale (7–9)</option>
+            <option value="midday">Pranzo (12–14)</option>
+            <option value="evening">Sera feriale (17–20)</option>
+            <option value="weekend">Sabato pomeriggio</option>
+          </select>
+        </div>
       </div>
 
-      <h2>Visualizzazione</h2>
-      <div class="checks">
-        <label><input type="checkbox" id="showImage" checked> Sfondo planimetria</label>
-        <label><input type="checkbox" id="showHotspots" checked> Zone critiche</label>
-        <label><input type="checkbox" id="showPaths"> Traiettorie</label>
-        <label><input type="checkbox" id="showStalls" checked> Posti auto</label>
-        <label><input type="checkbox" id="showLabels"> Etichette eventi</label>
-        <label><input type="checkbox" id="debugMode"> Modalità Debug (Log dev)</label>
+      <h2 class="collapsible-header">Flussi <span class="chevron">▼</span></h2>
+      <div class="collapsible-content">
+        <div class="field">
+          <label>Auto · veic/min</label>
+          <div class="sliderWrap"><input id="carFlow" type="range" min="0" max="60" value="15"><div class="valueBox" id="carFlowVal">15</div></div>
+        </div>
+        <div class="field">
+          <label>Bici · bici/min</label>
+          <div class="sliderWrap"><input id="bikeFlow" type="range" min="0" max="40" value="8"><div class="valueBox" id="bikeFlowVal">8</div></div>
+        </div>
+        <div class="field">
+          <label>Pedoni · ped/min</label>
+          <div class="sliderWrap"><input id="pedFlow" type="range" min="0" max="50" value="10"><div class="valueBox" id="pedFlowVal">10</div></div>
+        </div>
+        <div class="field">
+          <label>Manovre parcheggio · /h</label>
+          <div class="sliderWrap"><input id="parkingFlow" type="range" min="0" max="120" value="40"><div class="valueBox" id="parkingFlowVal">40</div></div>
+        </div>
+        <div class="field">
+          <label>Occupazione iniziale parcheggi (%)</label>
+          <div class="sliderWrap"><input id="parkingFill" type="range" min="0" max="100" value="65"><div class="valueBox" id="parkingFillVal">65</div></div>
+        </div>
       </div>
 
-      <div class="btnRow" style="margin-top:14px">
-        <button class="btnPrimary" id="pauseBtn">⏸ Pausa</button>
-        <button class="btnGhost" id="resetBtn">↻ Reset</button>
-      </div>
+      <h2 class="collapsible-header">Visualizzazione <span class="chevron">▼</span></h2>
+      <div class="collapsible-content">
+        <div class="checks">
+          <label><input type="checkbox" id="showImage" checked> Sfondo planimetria</label>
+          <label><input type="checkbox" id="showHotspots" checked> Zone critiche</label>
+          <label><input type="checkbox" id="showPaths"> Traiettorie</label>
+          <label><input type="checkbox" id="showStalls" checked> Posti auto</label>
+          <label><input type="checkbox" id="showLabels"> Etichette events</label>
+          <label><input type="checkbox" id="debugMode"> Modalità Debug (Log dev)</label>
+        </div>
 
-      <div class="miniLegend">
-        <div class="legendItem"><span class="legendSwatch" style="background:#3b82f6"></span> city car</div>
-        <div class="legendItem"><span class="legendSwatch" style="background:#1e293b"></span> SUV</div>
-        <div class="legendItem"><span class="legendSwatch" style="background:#cbd5e1"></span> furgone</div>
-        <div class="legendItem"><span class="legendSwatch" style="background:#a16207"></span> camioncino</div>
-        <div class="legendItem"><span class="legendSwatch" style="background:#dc2626"></span> moto</div>
-        <div class="legendItem"><span class="legendSwatch" style="background:#ea580c"></span> bici</div>
-        <div class="legendItem"><span class="legendSwatch" style="background:#0f172a"></span> pedone</div>
-        <div class="legendItem"><span class="legendSwatch" style="background:#7c3aed"></span> stallo disabili</div>
+        <div class="btnRow" style="margin-top:14px">
+          <button class="btnPrimary" id="pauseBtn">⏸ Pausa</button>
+          <button class="btnGhost" id="resetBtn">↻ Reset</button>
+        </div>
+
+        <div class="miniLegend">
+          <div class="legendItem"><span class="legendSwatch" style="background:#3b82f6"></span> city car</div>
+          <div class="legendItem"><span class="legendSwatch" style="background:#1e293b"></span> SUV</div>
+          <div class="legendItem"><span class="legendSwatch" style="background:#cbd5e1"></span> furgone</div>
+          <div class="legendItem"><span class="legendSwatch" style="background:#a16207"></span> camioncino</div>
+          <div class="legendItem"><span class="legendSwatch" style="background:#dc2626"></span> moto</div>
+          <div class="legendItem"><span class="legendSwatch" style="background:#ea580c"></span> bici</div>
+          <div class="legendItem"><span class="legendSwatch" style="background:#0f172a"></span> pedone</div>
+          <div class="legendItem"><span class="legendSwatch" style="background:#7c3aed"></span> stallo disabili</div>
+        </div>
       </div>
     </aside>
 
     <main class="main">
       <section class="canvasCard">
         <div class="titleRow">
-          <div>
-            <h3 id="tractTitle">—</h3>
-            <p id="tractDescription"></p>
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <button id="sidebarToggleBtn" class="btnGhost" title="Nascondi controlli" style="height: 40px; width: 40px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; border-radius: 10px;">☰</button>
+            <div>
+              <h3 id="tractTitle">—</h3>
+              <p id="tractDescription"></p>
+            </div>
           </div>
           <div class="toolbar">
             <div class="chip">Pendenze <b id="slopeChip">—</b></div>
@@ -118,6 +131,25 @@
         </div>
         <div class="stageWrap">
           <canvas id="stage" width="1400" height="400"></canvas>
+          <div class="hud-dashboard">
+            <div class="hud-header">
+              <span class="hud-pulse"></span> GINOSA SMART NETWORK
+            </div>
+            <div class="hud-metrics">
+              <div class="hud-metric">
+                <span class="hud-label">CO₂ IN ECCESSO (CODA)</span>
+                <span class="hud-value" id="hudCO2">0.0 g</span>
+              </div>
+              <div class="hud-metric">
+                <span class="hud-label">FLUSSO ATTIVO</span>
+                <span class="hud-value" id="hudActive">0 veic.</span>
+              </div>
+              <div class="hud-metric">
+                <span class="hud-label">VELOCITÀ MEDIA</span>
+                <span class="hud-value" id="hudSpeed">40.0 km/h</span>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
