@@ -327,6 +327,59 @@
   }
 
   function carBaseSpeed(){ return pathTotalLength(tract.carPath) / 14; }
+  // --- Pendenze -----------------------------------------------------------
+  // Parsing di tract.slopes (es. "8,4% · 8,5% · 8,9%") in array numerico.
+  function parseSlopes(str){
+    if(!str || typeof str !== 'string') return [];
+    // Normalizzo prima la virgola decimale → punto, poi splitto solo sui separatori "·;|/" o doppio spazio.
+    const norm = str.replace(/(\d),(\d)/g, '$1.$2');
+    return norm.split(/[·;|\/]+|\s{2,}/)
+      .map(s => s.replace(/%/g,'').trim())
+      .filter(s => s.length)
+      .map(Number)
+      .filter(n => !isNaN(n) && isFinite(n));
+  }
+  function tractSlopes(){
+    if(!tract._slopesArr){
+      tract._slopesArr = parseSlopes(tract.slopes);
+    }
+    return tract._slopesArr;
+  }
+  // Restituisce la pendenza (% positiva) nel punto t∈[0,1] del carPath.
+  function slopeAtT(t){
+    const arr = tractSlopes();
+    if(!arr.length) return 0;
+    const tt = Math.max(0, Math.min(0.9999, t));
+    return arr[Math.floor(tt * arr.length)] || 0;
+  }
+  // Se la direzione di marcia è quella del carPath in avanti, e tract è uphillForward,
+  // allora dir=1 = salita; altrimenti discesa.
+  function isGoingUphill(dirForward){
+    // Default: il carPath è disegnato in discesa (sx → dx).
+    // Cioè dirForward = true ⇒ DISCESA. Si può forzare uphillForward:true su un tratto
+    // dove il senso del polyline coincide con la salita.
+    const forwardIsUphill = tract.uphillForward === true; // default false
+    return forwardIsUphill ? dirForward : !dirForward;
+  }
+  // Fattore di velocità per auto/moto/furgoni in funzione di pendenza e tipo.
+  // 1.0 = nessun effetto. < 1 in salita per i veicoli più pesanti.
+  function carSlopeFactor(t, type, dirForward = true){
+    const slope = slopeAtT(t);
+    if(slope < 3) return 1;
+    if(!isGoingUphill(dirForward)) return 1; // discesa: nessuna penalità
+    const heavy = (type === 'van' || type === 'truck') ? 1.6 : (type === 'suv' ? 1.15 : 1.0);
+    return Math.max(0.7, 1 - (slope - 3) * 0.04 * heavy);
+  }
+  // Fattore per le bici: forte penalità in salita, leggera spinta in discesa.
+  function bikeSlopeFactor(t, dirForward){
+    const slope = slopeAtT(t);
+    if(slope < 0.5) return 1;
+    if(isGoingUphill(dirForward)){
+      return Math.max(0.35, 1 - slope * 0.08);
+    }
+    return Math.min(1.6, 1 + slope * 0.05);
+  }
+
   function bikeBaseSpeed(){
     let s = pathTotalLength(tract.bikePathFwd) / 18;
     if(ui.scenarioSelect.value === 'vulnerable_users'){
@@ -438,6 +491,7 @@
 
   function resetScene(full=true){
     tract = tractDefs[ui.tractSelect.value];
+    tract._slopesArr = null; // invalidate slope cache on tract switch
     updateCanvasSize();
     resetCamera();
     
@@ -1477,6 +1531,9 @@
         target = 0;
       }
 
+      // Pendenza: in salita, target ridotto in base a tipo veicolo e ripidità.
+      target = target * carSlopeFactor(c.t, c.type, true);
+
       if(c.speed > target){
         const newSpeed = Math.max(target, c.speed - c.decel * dt);
         if(c.speed - newSpeed > c.decel * dt * 0.6){
@@ -1678,7 +1735,9 @@
         mod = 0;
       }
       
-      b.speed = b.baseSpeed * mod;
+      // Pendenza: forte rallentamento in salita per le bici, lieve spinta in discesa.
+      const bikeSlope = bikeSlopeFactor(b.t, b.dir === 1);
+      b.speed = b.baseSpeed * mod * bikeSlope;
       b.dist += b.speed * dt;
       b.t = b.dir === 1 ? (b.dist / bikePathLen) : (1 - b.dist / bikePathLen);
     });
@@ -1965,6 +2024,7 @@
       if(c.state === 'entering'){
         const curP = c.entryDist;
         const mod = applyLeader(curP);
+        // L'auto è ancora nella traversa: nessuna pendenza significativa sul viale.
         c.entryDist += c.baseSpeed * mod * dt;
         if(c.entryDist >= c.entryLen){
           c.state = 'reverse';
@@ -1973,7 +2033,12 @@
       } else if(c.state === 'reverse'){
         const curP = c.entryLen + c.dist;
         const mod = applyLeader(curP);
-        c.dist += c.baseSpeed * mod * dt;
+        // Le auto contromano percorrono il viale in senso inverso → effettivamente in discesa.
+        // Per stimare la pendenza nel punto, ricavo la posizione corrispondente sul carPath.
+        const revPos = pointOnPath(c.revPath, Math.min(1, Math.max(0, c.t)));
+        const carT = nearestCarT(revPos).t;
+        const slopeMod = carSlopeFactor(carT, c.type, false);
+        c.dist += c.baseSpeed * mod * slopeMod * dt;
         c.t = c.dist / c.revLen;
         const exitDist = c.exitT_on_rev * c.revLen;
         if(c.dist >= exitDist){
