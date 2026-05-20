@@ -38,7 +38,8 @@ window.VialeData.tractDefs = {
     description:'Tratto più delicato per pendenze elevate, curva del viale, area verde e molti passi carrabili sul lato della pista.',
     image:'./viale_sim_assets/H.png', width:1798, height:470,
     slopes:'8,4% · 8,5% · 8,9%', orientation:'pista in basso · senso unico verso destra',
-    carPath:[], bikePath:[], crossings:[], driveways:[], disabled:[], stalls:[], moto:[], sideStreets:[], blockage:null, hotspots:[],
+    carPath:[], carPathReverse:[], bikePath:[], crossings:[], driveways:[], disabled:[], stalls:[], moto:[], sideStreets:[], blockage:null, hotspots:[],
+    reverseConfig: { entry: 'Cacciatori', exits: ['1','2','3'] },
     bugs:['Pendenze medie 8,4%-8,9%: è il tratto normativamente più debole.','Passi carrabili ripetuti proprio sul lato della pista bidirezionale.','Curva, parco e attraversamenti spontanei aumentano i conflitti reali.']
   }
 };

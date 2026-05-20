@@ -274,15 +274,21 @@
     position: relative;
     padding: 0;
     background: #0f172a;
+  }
+
+  .canvas-wrap {
     display: flex;
     align-items: center;
     justify-content: center;
+    position: relative;
+    box-sizing: border-box;
   }
 
   canvas {
     display: block;
     cursor: crosshair;
     box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    flex-shrink: 0;
   }
 
   .status {
@@ -519,7 +525,9 @@
     ⌨️ <b>Space + Drag</b> o <b>Mouse 3 Drag</b>: Panning mappa<br>
     ⌨️ <b>Ctrl + Z</b>: Annulla punto | <b>Canc</b>: Elimina elemento attivo
   </div>
-  <canvas id="canvas"></canvas>
+  <div class="canvas-wrap" id="canvasWrap">
+    <canvas id="canvas"></canvas>
+  </div>
 </div>
 <div class="status" id="status"></div>
 
@@ -540,8 +548,8 @@ const statusEl = document.getElementById('status');
 let vehicleScale = 1.0;
 let refSUV = { x: 100, y: 100, angle: 0 };
 
-const COLORS = {carPath:'#3b82f6',bikePath:'#f97316',sidestreet:'#3b82f6',crossing:'rgba(255,255,255,0.4)',driveway:'#8b5cf6',stall:'rgba(16,185,129,0.3)',disabled:'rgba(59,130,246,0.3)',moto:'rgba(234,179,8,0.3)',hotspot:'rgba(239,68,68,0.25)',blockage:'#ef4444'};
-const AREA_TYPES = ['crossing','stall','disabled','moto','hotspot'];
+const COLORS = {carPath:'#3b82f6',carPathReverse:'#ec4899',bikePath:'#f97316',sidestreet:'#3b82f6',crossing:'rgba(255,255,255,0.4)',driveway:'#8b5cf6',stall:'rgba(16,185,129,0.3)',disabled:'rgba(59,130,246,0.3)',moto:'rgba(234,179,8,0.3)',hotspot:'rgba(239,68,68,0.25)',blockage:'#ef4444'};
+const AREA_TYPES = ['crossing','hotspot'];
 
 const defaultTracts = {
   D:{title:'D · Isolati 01-02-03',image:'./viale_sim_assets/D.png',w:1165,h:296},
@@ -553,10 +561,10 @@ const defaultTracts = {
 
 const defaultPaths = {
   D:{carPath:[[18,106],[95,107],[170,108],[290,110],[420,112],[545,114],[670,114],[795,112],[920,110],[1045,109],[1148,108]],bikePath:[[1110,208],[1000,207],[900,207],[780,208],[660,210],[545,210],[420,209],[300,207],[190,204],[85,200]],crossings:[{name:'Via Toti',path:[[72,82],[72,222]]},{name:'Attraversamento centrale',path:[[515,98],[515,218]]},{name:'Via Bainsizza',path:[[1045,92],[1045,218]]}],driveways:[{name:'Accesso 1',path:[[640,272],[640,245],[636,218],[630,195]]},{name:'Accesso 2',path:[[935,270],[935,244],[930,218],[926,196]]}],disabled:[{name:'Stallo disabili',path:[[500,120],[500,148],[500,182],[500,214]]}],hotspots:[],blockage:{x:690,y:108},sideStreets:[],stalls:[],moto:[]},
-  E:{carPath:[],bikePath:[],crossings:[],driveways:[],disabled:[],hotspots:[],blockage:{x:0,y:0},sideStreets:[],stalls:[],moto:[]},
-  F:{carPath:[],bikePath:[],crossings:[],driveways:[],disabled:[],hotspots:[],blockage:{x:0,y:0},sideStreets:[],stalls:[],moto:[]},
-  G:{carPath:[],bikePath:[],crossings:[],driveways:[],disabled:[],hotspots:[],blockage:{x:0,y:0},sideStreets:[],stalls:[],moto:[]},
-  H:{carPath:[],bikePath:[],crossings:[],driveways:[],disabled:[],hotspots:[],blockage:{x:0,y:0},sideStreets:[],stalls:[],moto:[]}
+  E:{carPath:[],carPathReverse:[],bikePath:[],crossings:[],driveways:[],disabled:[],hotspots:[],blockage:{x:0,y:0},sideStreets:[],stalls:[],moto:[]},
+  F:{carPath:[],carPathReverse:[],bikePath:[],crossings:[],driveways:[],disabled:[],hotspots:[],blockage:{x:0,y:0},sideStreets:[],stalls:[],moto:[]},
+  G:{carPath:[],carPathReverse:[],bikePath:[],crossings:[],driveways:[],disabled:[],hotspots:[],blockage:{x:0,y:0},sideStreets:[],stalls:[],moto:[]},
+  H:{carPath:[],carPathReverse:[],bikePath:[],crossings:[],driveways:[],disabled:[],hotspots:[],blockage:{x:0,y:0},sideStreets:[],stalls:[],moto:[]}
 };
 
 let currentKey = new URLSearchParams(location.search).get('tract') || 'D';
@@ -580,6 +588,7 @@ function tractToEditable(data) {
   const out = {};
   oneWayPaths.clear(); directions = {};
   out.carPath = JSON.parse(JSON.stringify(data.carPath || []));
+  out.carPathReverse = JSON.parse(JSON.stringify(data.carPathReverse || []));
   out.bikePath = JSON.parse(JSON.stringify(data.bikePath || []));
   
   (data.crossings||[]).forEach(c => { 
@@ -611,6 +620,7 @@ function tractToEditable(data) {
 function editableToTract(ed) {
   const out = {crossings:[], sideStreets:[], driveways:[], stalls:[], disabled:[], moto:[], hotspots:[], blockage:{x:0,y:0}, scale: vehicleScale, refSUV: refSUV};
   out.carPath = ed.carPath || [];
+  out.carPathReverse = ed.carPathReverse || [];
   out.bikePath = ed.bikePath || [];
   Object.keys(ed).forEach(k => {
     const pts = ed[k];
@@ -675,6 +685,7 @@ function loadTract() {
     canvas.width = t.w * scale;
     canvas.height = t.h * scale;
     fitZoom();
+    centerScroll();
     render();
   };
   bgImage.src = t.image;
@@ -710,6 +721,7 @@ document.getElementById('dirSel').onchange = (e) => {
 
 function pathColor(name) {
   if(name==='carPath') return COLORS.carPath;
+  if(name==='carPathReverse') return COLORS.carPathReverse;
   if(name==='bikePath') return COLORS.bikePath;
   if(name.startsWith('sidestreet:')) return COLORS.sidestreet;
   if(name.startsWith('crossing:')) return COLORS.crossing;
@@ -724,6 +736,7 @@ function pathColor(name) {
 
 function pathTypeLabel(name) {
   if(name==='carPath') return '🚗';
+  if(name==='carPathReverse') return '↩️';
   if(name==='bikePath') return '🚲';
   if(name.startsWith('sidestreet:')) return '🛣️';
   if(name.startsWith('crossing:')) return '🚶';
@@ -736,7 +749,7 @@ function pathTypeLabel(name) {
   return '?';
 }
 
-function canDelete(name) { return !['carPath','bikePath'].includes(name); }
+function canDelete(name) { return !['carPath','carPathReverse','bikePath'].includes(name); }
 
 function buildList() {
   const list = document.getElementById('pathList');
@@ -792,13 +805,27 @@ function fitZoom() {
 }
 function applyZoom() {
   const t = defaultTracts[currentKey];
-  canvas.style.width = (t.w*zoom)+'px';
-  canvas.style.height = (t.h*zoom)+'px';
+  const cw = t.w * zoom;
+  const ch = t.h * zoom;
+  canvas.style.width = cw + 'px';
+  canvas.style.height = ch + 'px';
+  const wrap = document.getElementById('canvasWrap');
+  if (wrap) {
+    wrap.style.width = (cw + 600) + 'px';
+    wrap.style.height = (ch + 600) + 'px';
+  }
+}
+function centerScroll() {
+  const wrap = document.getElementById('canvasWrap');
+  if (wrap) {
+    mainArea.scrollLeft = (wrap.clientWidth - mainArea.clientWidth) / 2;
+    mainArea.scrollTop = (wrap.clientHeight - mainArea.clientHeight) / 2;
+  }
 }
 document.getElementById('zIn').onclick = () => { zoom=Math.min(4,zoom*1.3); applyZoom(); };
 document.getElementById('zOut').onclick = () => { zoom=Math.max(.1,zoom*.77); applyZoom(); };
-document.getElementById('zFit').onclick = fitZoom;
-document.getElementById('z100').onclick = () => { zoom=1; applyZoom(); };
+document.getElementById('zFit').onclick = () => { fitZoom(); centerScroll(); };
+document.getElementById('z100').onclick = () => { zoom=1; applyZoom(); centerScroll(); };
 mainArea.addEventListener('wheel', e => { e.preventDefault(); zoom*=e.deltaY<0?1.12:.89; zoom=Math.max(.1,Math.min(4,zoom)); applyZoom(); }, {passive:false});
 
 function render() {
@@ -838,10 +865,77 @@ function render() {
         ctx.fillStyle = color; ctx.fillRect(pts[0][0]-15, pts[0][1]-8, 30, 16);
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(pts[0][0]-15, pts[0][1]-8, 30, 16);
       }
+    } else if(name.startsWith('stall:') || name.startsWith('disabled:') || name.startsWith('moto:')) {
+      const type = name.startsWith('stall:') ? 'normal' : (name.startsWith('disabled:') ? 'disabled' : 'moto');
+      const L = type === 'moto' ? 14 : 28;
+      const W = type === 'moto' ? 9 : 13;
+      
+      if(pts.length === 4) {
+        // Draw as a Zone polygon
+        ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+        for(let i=1; i<pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+        ctx.closePath();
+        ctx.fillStyle = color.replace('1)','0.15)').replace('0.8)','0.15)').replace('0.7)','0.15)');
+        ctx.fill();
+        ctx.strokeStyle = active ? '#fff' : color.replace('0.3', '0.7');
+        ctx.lineWidth = active ? 2.5 : 1.2;
+        ctx.stroke();
+        
+        if (type === 'disabled') {
+          const cx = (pts[0][0] + pts[1][0] + pts[2][0] + pts[3][0]) / 4;
+          const cy = (pts[0][1] + pts[1][1] + pts[2][1] + pts[3][1]) / 4;
+          ctx.fillStyle = active ? '#fff' : 'rgba(59,130,246,0.85)';
+          ctx.font = 'bold 11px Inter, sans-serif';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText('♿', cx, cy);
+        }
+      } else {
+        // Draw individual discrete stalls
+        pts.forEach((pt, j) => {
+          let spotAngle = 0;
+          if (paths.carPath && paths.carPath.length >= 2) {
+            const near = nearestT(paths.carPath, pt);
+            const carPos = pointOnPath(paths.carPath, near.t);
+            const distToRoad = Math.hypot(pt[0] - carPos.x, pt[1] - carPos.y);
+            let isBay = false;
+            if(distToRoad >= 22 && pts.length >= 2){
+              const dx = pts[pts.length-1][0]-pts[0][0];
+              const dy = pts[pts.length-1][1]-pts[0][1];
+              const stallAngle = Math.atan2(dy, dx);
+              let diff = stallAngle - carPos.angle;
+              while(diff > Math.PI) diff -= 2*Math.PI;
+              while(diff < -Math.PI) diff += 2*Math.PI;
+              const absDiff = Math.min(Math.abs(diff), Math.PI - Math.abs(diff));
+              isBay = absDiff > Math.PI/4;
+            }
+            spotAngle = isBay ? Math.atan2(pt[1] - carPos.y, pt[0] - carPos.x) : carPos.angle;
+            if (type === 'moto') {
+              spotAngle = lerpAngle(carPos.angle, Math.atan2(pt[1] - carPos.y, pt[0] - carPos.x), 0.65);
+            }
+          }
+          
+          ctx.save();
+          ctx.translate(pt[0], pt[1]);
+          ctx.rotate(spotAngle);
+          ctx.fillStyle = color.replace('1)','0.1)').replace('0.8)','0.1)').replace('0.7)','0.1)');
+          ctx.fillRect(-L/2, -W/2, L, W);
+          ctx.strokeStyle = active ? '#fff' : color.replace('0.3', '0.7');
+          ctx.lineWidth = active ? 1.8 : 1.0;
+          ctx.setLineDash([3, 3]);
+          ctx.strokeRect(-L/2, -W/2, L, W);
+          if (type === 'disabled') {
+            ctx.fillStyle = active ? '#fff' : 'rgba(59,130,246,0.85)';
+            ctx.font = 'bold 9px Inter, sans-serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText('♿', 0, 0.5);
+          }
+          ctx.restore();
+        });
+      }
     } else {
       ctx.strokeStyle = color;
       ctx.lineWidth = active?4:2;
-      const isDash = !['carPath','bikePath','sidestreet:'].some(x => name.startsWith(x));
+      const isDash = !['carPath','carPathReverse','bikePath','sidestreet:'].some(x => name.startsWith(x));
       ctx.setLineDash(isDash?[6,4]:[]);
       if(pts.length>1) {
         ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
@@ -897,11 +991,26 @@ function ptSegDist(px,py,a,b) {
   return Math.hypot(px-(a[0]+t*dx),py-(a[1]+t*dy));
 }
 
+function isEditingText() {
+  const el = document.activeElement;
+  if (!el) return false;
+  const tag = el.tagName.toLowerCase();
+  if (tag === 'textarea') return true;
+  if (tag === 'input') {
+    const type = el.type.toLowerCase();
+    return ['text', 'number', 'search', 'email', 'password', 'url'].includes(type);
+  }
+  return false;
+}
+
 // Keyboards event
 window.addEventListener('keydown', e => {
-  if(e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (isEditingText()) return;
 
   if (e.code === 'Space') {
+    if (document.activeElement && document.activeElement !== document.body) {
+      document.activeElement.blur();
+    }
     e.preventDefault();
     spacePressed = true;
     canvas.style.cursor = 'grab';
@@ -1190,6 +1299,63 @@ document.getElementById('resetStorBtn').onclick = () => {
   localStorage.removeItem('viale_tract_'+currentKey); loadTract();
   flash('Tavola ripristinata!');
 };
+
+function polyLengths(points){
+  if(!points || points.length < 2) return {lens:[0], total:0};
+  let lens=[0], total=0;
+  for(let i=1;i<points.length;i++){
+    const dx=points[i][0]-points[i-1][0], dy=points[i][1]-points[i-1][1];
+    total += Math.hypot(dx,dy); lens.push(total);
+  }
+  return {lens,total};
+}
+function pointOnPath(points, t){
+  if(!points || points.length === 0) return {x:0, y:0, angle:0};
+  if(points.length === 1) return {x:points[0][0], y:points[0][1], angle:0};
+  const {lens,total} = polyLengths(points);
+  if(total === 0) return {x:points[0][0], y:points[0][1], angle:0};
+  const target = (isNaN(t) ? 0 : t) * total;
+  
+  if(t < 0){
+    const a = points[0], b = points[1];
+    const ang = Math.atan2(b[1]-a[1], b[0]-a[0]);
+    return { x: a[0] + target*Math.cos(ang), y: a[1] + target*Math.sin(ang), angle: ang };
+  }
+  if(t > 1){
+    const n = points.length;
+    const a = points[n-2], b = points[n-1];
+    const ang = Math.atan2(b[1]-a[1], b[0]-a[0]);
+    const over = target - total;
+    return { x: b[0] + over*Math.cos(ang), y: b[1] + over*Math.sin(ang), angle: ang };
+  }
+
+  let i=1; while(i<lens.length && lens[i] < target) i++;
+  if(i >= points.length) i = points.length - 1;
+  const a = points[i-1], b = points[i], prev=lens[i-1], segLen=lens[i]-prev || 1;
+  const local = Math.max(0, Math.min(1, (target-prev)/segLen));
+  return {
+    x: a[0] + (b[0]-a[0])*local,
+    y: a[1] + (b[1]-a[1])*local,
+    angle: Math.atan2(b[1]-a[1], b[0]-a[0])
+  };
+}
+function nearestT(path, pt){
+  let bestT = 0, bestD = Infinity;
+  const N = 200;
+  for(let i=0;i<=N;i++){
+    const t = i/N;
+    const p = pointOnPath(path, t);
+    const d = (p.x-pt[0])**2 + (p.y-pt[1])**2;
+    if(d < bestD){ bestD = d; bestT = t; }
+  }
+  return {t: bestT, d: Math.sqrt(bestD)};
+}
+function lerpAngle(a,b,t){
+  let d = b - a;
+  while(d > Math.PI) d -= 2*Math.PI;
+  while(d < -Math.PI) d += 2*Math.PI;
+  return a + d*t;
+}
 
 async function initApp() {
   await loadCalibrationFile();

@@ -28,14 +28,15 @@
   }
 
   async function loadCalibrationData() {
+    let fileData = null;
     try {
       const res = await fetch('viale_calibration.json?' + Date.now());
       if (res.ok) {
-        const fileData = await res.json();
+        fileData = await res.json();
         tractOrder.forEach(k => {
           if (fileData[k]) {
             const t = tractDefs[k];
-            ['carPath','bikePath','crossings','driveways','disabled','hotspots','blockage','sideStreets','stalls','moto','scale'].forEach(f => {
+            ['carPath','carPathReverse','bikePath','crossings','driveways','disabled','hotspots','blockage','scale'].concat(['sideStreets','stalls','moto']).forEach(f => {
               if(fileData[k][f] !== undefined) t[f] = fileData[k][f];
             });
           }
@@ -49,8 +50,35 @@
         if (!saved) return;
         const data = JSON.parse(saved);
         const t = tractDefs[k];
-        ['carPath','bikePath','crossings','driveways','disabled','hotspots','blockage','sideStreets','stalls','moto','scale'].forEach(f => {
-          if(data[f] !== undefined) t[f] = data[f];
+        ['carPath','carPathReverse','bikePath','crossings','driveways','disabled','hotspots','blockage','scale'].concat(['sideStreets','stalls','moto']).forEach(f => {
+          if(data[f] !== undefined) {
+            // Se in locale l'array è vuoto o privo di geometria reale, ma nel file del server è popolato, mantieni quello del server
+            let isLocalEmpty = false;
+            if (Array.isArray(data[f])) {
+              if (data[f].length === 0) {
+                isLocalEmpty = true;
+              } else {
+                if (Array.isArray(data[f][0]) && typeof data[f][0][0] === 'number') {
+                  if (data[f].length < 2) isLocalEmpty = true;
+                } else {
+                  const hasValidGeometry = data[f].some(item => {
+                    if (!item) return false;
+                    if (Array.isArray(item.path) && item.path.length >= 2) return true;
+                    if (Array.isArray(item.area) && item.area.length >= 3) return true;
+                    if (typeof item.x === 'number' && typeof item.y === 'number') return true;
+                    return false;
+                  });
+                  if (!hasValidGeometry) isLocalEmpty = true;
+                }
+              }
+            }
+            const hasServerData = fileData && fileData[k] && Array.isArray(fileData[k][f]) && fileData[k][f].length > 0;
+            if (isLocalEmpty && hasServerData) {
+              // Non sovrascrivere
+            } else {
+              t[f] = data[f];
+            }
+          }
         });
       } catch(e) { console.warn('Calibrazione locale ' + k + ':', e); }
     });
@@ -81,7 +109,12 @@
   let tract = tractDefs.D;
   let paused = false;
   let lastTime = performance.now();
-  let entities = {cars:[], bikes:[], peds:[], drivewayCars:[], sideCars:[], parked:[], van:null};
+  let entities = {cars:[], bikes:[], peds:[], drivewayCars:[], sideCars:[], reverseCars:[], parked:[], van:null};
+  if (typeof window !== 'undefined') {
+    Object.defineProperty(window, '__entities', { get: () => entities, configurable: true });
+    Object.defineProperty(window, '__tract', { get: () => tract, configurable: true });
+    window.__spawnReverse = () => { try { spawnReverseCar(); return entities.reverseCars.length; } catch(e) { return 'err: ' + e.message; } };
+  }
   let flashes = [];
   let spawners = {car:0,bike:0,ped:0,driveway:0,side:0,special:0,parking:0,delivery:0};
   let parkingSlots = [];
@@ -386,8 +419,11 @@
   }
 
   function buildCrossingCarTs(){
-    return tract.crossings.map(c => {
-      const pts = c.path || c.area || [[c.x,c.y1],[c.x,c.y2]];
+    return (tract.crossings || []).map(c => {
+      const pts = c.path || c.area || (typeof c.x === 'number' && typeof c.y1 === 'number' && typeof c.y2 === 'number' ? [[c.x,c.y1],[c.x,c.y2]] : null);
+      if(!pts || pts.length === 0){
+        return null;
+      }
       let mid;
       if(pts.length >= 3){
          let sx=0, sy=0; pts.forEach(p=>{sx+=p[0]; sy+=p[1]});
@@ -397,7 +433,7 @@
       }
       const near = nearestCarT(mid);
       return {crossing: c, carT: near.t, dist: near.d};
-    }).filter(item => item.dist < 40); // Solo se il passaggio pedonale è effettivamente sul Viale
+    }).filter(item => item !== null && item.dist < 40); // Solo se il passaggio pedonale è effettivamente sul Viale
   }
 
   function resetScene(full=true){
@@ -406,7 +442,12 @@
     resetCamera();
     
     (tract.crossings || []).forEach(c => {
-      const pts = c.path || c.area || [[c.x,c.y1],[c.x,c.y2]];
+      const pts = c.path || c.area || (typeof c.x === 'number' && typeof c.y1 === 'number' && typeof c.y2 === 'number' ? [[c.x,c.y1],[c.x,c.y2]] : null);
+      if(!pts || pts.length === 0){
+        c.walkPath = null;
+        c.intersectsBikePath = false;
+        return;
+      }
       // Automatic walking path from 4-point rectangle
       if(pts.length === 4){
         // Find midpoints of opposite sides. Assume walking between the "short" ends.
@@ -437,7 +478,7 @@
       }
       c.intersectsBikePath = minD < 15;
     });
-    entities = {cars:[], bikes:[], peds:[], drivewayCars:[], sideCars:[], parked:[], van:null, ambulance:null};
+    entities = {cars:[], bikes:[], peds:[], drivewayCars:[], sideCars:[], reverseCars:[], parked:[], van:null, ambulance:null};
     flashes = []; spawners = {car:0,bike:0,ped:0,driveway:0,side:0,special:0,parking:0,delivery:0};
     if(full){
       stats = {crashes:0, nearMisses:0};
@@ -682,10 +723,11 @@
   }
   function spawnPed(){
     if(!tract.crossings.length) return;
+    const eligible = tract.crossings.filter(c => c.walkPath && c.walkPath.length >= 2);
+    if(!eligible.length) return;
     const s = (tract && tract.scale) ? tract.scale : 1.0;
-    const crossing = tract.crossings[Math.floor(rand(0,tract.crossings.length))];
+    const crossing = eligible[Math.floor(rand(0,eligible.length))];
     const path = crossing.walkPath;
-    if(!path || !path.length) return;
     const dir = Math.random() < .5 ? 1 : -1;
     const ordered = dir === 1 ? path : [...path].reverse();
     
@@ -734,7 +776,8 @@
   }
   function spawnSideStreetCar(){
     if(!tract.sideStreets || !tract.sideStreets.length) return;
-    const eligible = tract.sideStreets.filter(s => s.direction !== 'in');
+    const revEntry = (tract.reverseConfig && tract.reverseConfig.entry) || null;
+    const eligible = tract.sideStreets.filter(s => s.direction !== 'in' && s.name !== revEntry);
     if(!eligible.length) return;
     const s = eligible[Math.floor(rand(0,eligible.length))];
     const len = pathTotalLength(s.path);
@@ -748,6 +791,66 @@
       path:s.path, t:-0.08, dist:-0.08 * len, baseSpeed: (len/3.5) * sc, name:s.name,
       state:'travelling', _emergencyHold: 0,
       customColors
+    });
+  }
+  function spawnReverseCar(){
+    if(!tract.carPathReverse || tract.carPathReverse.length < 2) return;
+    if(!tract.reverseConfig) return;
+    const cfg = tract.reverseConfig;
+    if(!cfg.entry) return;
+    const entryStreet = tract.sideStreets.find(s => s.name === cfg.entry);
+    if(!entryStreet || !entryStreet.path || entryStreet.path.length < 2) return;
+
+    const revPath = tract.carPathReverse;
+    const revLen = pathTotalLength(revPath);
+    if(revLen <= 0) return;
+
+    const exits = (cfg.exits || []).map(n => tract.sideStreets.find(s => s.name === n))
+      .filter(s => s && s.path && s.path.length >= 2);
+    if(!exits.length) return;
+
+    // Avoid stacking too many at entry.
+    const busy = entities.reverseCars.some(o => o.state === 'entering' || (o.state === 'reverse' && o.dist < 80));
+    if(busy) return;
+
+    // Build entry path: from outside endpoint of entry street to its sbocco on viale,
+    // continuing onto carPathReverse start.
+    const entryDHead = Math.hypot(entryStreet.path[0][0]-revPath[0][0], entryStreet.path[0][1]-revPath[0][1]);
+    const entryDTail = Math.hypot(entryStreet.path[entryStreet.path.length-1][0]-revPath[0][0], entryStreet.path[entryStreet.path.length-1][1]-revPath[0][1]);
+    const entryPath = entryDTail <= entryDHead ? entryStreet.path.slice() : entryStreet.path.slice().reverse();
+    // Snap last point to revPath start for smooth join.
+    entryPath[entryPath.length-1] = [revPath[0][0], revPath[0][1]];
+    const entryLen = pathTotalLength(entryPath);
+
+    // Pick a random exit street.
+    const exitStreet = exits[Math.floor(rand(0, exits.length))];
+    const dHead = nearestT(revPath, {x: exitStreet.path[0][0], y: exitStreet.path[0][1]}).d;
+    const dTail = nearestT(revPath, {x: exitStreet.path[exitStreet.path.length-1][0], y: exitStreet.path[exitStreet.path.length-1][1]}).d;
+    if(Math.min(dHead, dTail) > 80) return;
+    const sboccoFirst = dHead <= dTail;
+    const sboccoPt = sboccoFirst ? exitStreet.path[0] : exitStreet.path[exitStreet.path.length-1];
+    const intersect = nearestT(revPath, {x: sboccoPt[0], y: sboccoPt[1]});
+    const exitPath = sboccoFirst ? exitStreet.path.slice() : exitStreet.path.slice().reverse();
+    exitPath[0] = [sboccoPt[0], sboccoPt[1]];
+    const exitLen = pathTotalLength(exitPath);
+
+    const type = pickVehicleType();
+    const sc = (tract && tract.scale) ? tract.scale : 1.0;
+    const customColors = getRandomVehicleColors(type);
+    const speedFactor = (VEHICLE_TYPES[type] && VEHICLE_TYPES[type].speedFactor) || 1.0;
+    const baseSpeed = carBaseSpeed() * speedFactor * 0.85; // poco più lente del flusso principale (zona delicata)
+
+    entities.reverseCars.push({
+      type, ...vDim(type),
+      state: 'entering',
+      entryPath, revPath, exitPath,
+      entryLen, revLen, exitLen,
+      exitT_on_rev: intersect.t,
+      entryDist: 0, dist: 0, exitDist: 0,
+      baseSpeed,
+      customColors,
+      exitName: exitStreet.name,
+      entryName: entryStreet.name
     });
   }
   function spawnDisabledUser(){
@@ -845,6 +948,8 @@
     spawners.car -= dt; spawners.bike -= dt; spawners.ped -= dt;
     spawners.driveway -= dt; spawners.side -= dt; spawners.special -= dt;
     spawners.parking -= dt; spawners.delivery -= dt;
+    if(spawners.reverse === undefined) spawners.reverse = 0;
+    spawners.reverse -= dt;
 
     const carRate = Number(ui.carFlow.value);
     if(spawners.car <= 0 && carRate > 0){
@@ -871,6 +976,15 @@
          spawners.side = baseInterval * (30 / Math.max(10, carRate));
        } else {
          spawners.side = 9999;
+       }
+    }
+    if(spawners.reverse <= 0 && tract.carPathReverse && tract.carPathReverse.length >= 2 && tract.reverseConfig){
+       spawnReverseCar();
+       const carRate = Number(ui.carFlow.value);
+       if(carRate > 0){
+         spawners.reverse = rand(10, 22) * (30 / Math.max(10, carRate));
+       } else {
+         spawners.reverse = 9999;
        }
     }
     if(scenario==='vulnerable_users' && spawners.special <= 0 && tract.disabled.length){
@@ -940,7 +1054,7 @@
               c.driverKind = driverKind;
               entities.parked.push({
                 id: bestSlot.id, slot: bestSlot, name: bestSlot.parentName, type: bestSlot.type,
-                state: 'reserved', vehicleType: c.type, driverKind, animT: 0
+                state: 'reserved', vehicleType: c.type, driverKind, animT: 0, customColors: c.customColors
               });
               if(driverKind === 'abuser'){
                 pushLog('park-abuse', `Abuso stallo disabili: ${vDim(c.type).name} parcheggia in ${bestSlot.parentName} senza contrassegno.`, 'crash');
@@ -1234,7 +1348,7 @@
                 pushLog('crash', `Incidente: ${VEHICLE_TYPES[c.type].name} tampona ${VEHICLE_TYPES[ahead.type].name} (sosta selvaggia).`, 'crash');
               }
             } else {
-              c.dist = ahead.dist - (c.length + ahead.length)/2 - 1;
+              c.dist = ahead.dist - (c.length + ahead.length)/2 - 6; // Keep a clean 6-pixel (~1m) visual gap
               c.t = c.dist / carPathLen;
               if(!c._nearMissTs || performance.now() - c._nearMissTs > 4000){
                 c._nearMissTs = performance.now();
@@ -1391,7 +1505,18 @@
            pushLog('turn', `${vDim(c.type).name} ha svoltato in ${c.targetSideStreet.name}.`);
         } else {
            const reservation = entities.parked.find(p => p.id === c.targetSlot.id);
-           if(reservation){ reservation.state = 'parked'; reservation.animT = 1; }
+           if(reservation){
+             reservation.state = 'parked';
+             reservation.animT = 1;
+             if(reservation.slot){
+               reservation.x = reservation.slot.x;
+               reservation.y = reservation.slot.y;
+               reservation.angle = reservation.slot.angle;
+               reservation.entryT = reservation.slot.entryT;
+               reservation.entryAngle = reservation.slot.entryAngle;
+               reservation.isBay = reservation.slot.isBay;
+             }
+           }
            c.state = 'done';
         }
       }
@@ -1778,8 +1903,9 @@
           if(e.yieldT > 0.4) trackEvent('yield');
         }
       } else if(e.state === 'merging'){
-        e.mergeAnimT += dt / mergeDuration;
+        if(e.mergeAnimT < 1) e.mergeAnimT += dt / mergeDuration;
         if(e.mergeAnimT >= 1){
+          e.mergeAnimT = 1; // pin at end of merge animation
           const carPathLen = pathTotalLength(tract.carPath);
           const mergeDist = e.mergeT * carPathLen;
           const newLen = VEHICLE_TYPES[e.type].length;
@@ -1791,8 +1917,9 @@
           if(!tooClose){
             const baseRoadSpeed = carBaseSpeed() * VEHICLE_TYPES[e.type].speedFactor;
             entities.cars.push(makeCar({type:e.type, startT: e.mergeT, speed: baseRoadSpeed * 0.55, customColors: e.customColors}));
+            e.state = 'done';
           }
-          e.state = 'done';
+          // Se tooClose: l'auto resta visibile al termine del merge in attesa che il flusso si liberi.
         }
       }
     };
@@ -1803,14 +1930,76 @@
     entities.sideCars.forEach(s => updateExitPath(s, entities.sideCars, 1.5));
     entities.sideCars = entities.sideCars.filter(s => s.state !== 'done');
 
+    entities.reverseCars.forEach(c => {
+      // Leader is the closest reverseCar ahead, on the same logical track.
+      const findRevLeader = () => {
+        return entities.reverseCars
+          .filter(o => o !== c && o.state !== 'done')
+          .map(o => {
+            // Compute "linear progression" so any state ahead is detected.
+            let p = 0;
+            if(o.state === 'entering') p = o.entryDist;
+            else if(o.state === 'reverse') p = c.entryLen + o.dist;
+            else if(o.state === 'exiting') p = c.entryLen + c.revLen + o.exitDist;
+            return {o, p};
+          })
+          .filter(x => {
+            let cp = 0;
+            if(c.state === 'entering') cp = c.entryDist;
+            else if(c.state === 'reverse') cp = c.entryLen + c.dist;
+            else if(c.state === 'exiting') cp = c.entryLen + c.revLen + c.exitDist;
+            return x.p > cp;
+          })
+          .sort((a,b) => a.p - b.p)[0];
+      };
+      const applyLeader = (curP) => {
+        const lead = findRevLeader();
+        if(!lead) return 1;
+        const gap = lead.p - curP - (c.length + lead.o.length)/2;
+        if(gap >= 45) return 1;
+        const safeGap = 14;
+        if(gap < safeGap) return 0;
+        return Math.max(0, (gap - safeGap)/28);
+      };
+
+      if(c.state === 'entering'){
+        const curP = c.entryDist;
+        const mod = applyLeader(curP);
+        c.entryDist += c.baseSpeed * mod * dt;
+        if(c.entryDist >= c.entryLen){
+          c.state = 'reverse';
+          c.dist = 0; c.t = 0;
+        }
+      } else if(c.state === 'reverse'){
+        const curP = c.entryLen + c.dist;
+        const mod = applyLeader(curP);
+        c.dist += c.baseSpeed * mod * dt;
+        c.t = c.dist / c.revLen;
+        const exitDist = c.exitT_on_rev * c.revLen;
+        if(c.dist >= exitDist){
+          c.state = 'exiting';
+          c.exitDist = 0;
+        }
+      } else if(c.state === 'exiting'){
+        const curP = c.entryLen + c.revLen + c.exitDist;
+        const mod = applyLeader(curP);
+        c.exitDist += c.baseSpeed * mod * dt;
+        if(c.exitDist >= c.exitLen + 20) c.state = 'done';
+      }
+    });
+    entities.reverseCars = entities.reverseCars.filter(c => c.state !== 'done');
+
     entities.parked.forEach(p => {
       if(p.state === 'parking'){
-        if(p.maneuver){
-          if(mAdvance(p.maneuver, dt)){
-            p.state = 'parked'; p.animT = 1;
-          }
-        } else {
-          p.animT = 1; p.state = 'parked';
+        // The maneuver is advanced by the car in entities.cars.
+        // We just ensure slot coordinates are copied when it transitions to parked.
+        if (p.slot && p.x === undefined) {
+          p.x = p.slot.x;
+          p.y = p.slot.y;
+          p.angle = p.slot.angle;
+          p.entryT = p.slot.entryT;
+          p.entryAngle = p.slot.entryAngle;
+          p.isBay = p.slot.isBay;
         }
       } else if(p.state === 'unparking'){
         if(!p.maneuver){
@@ -1819,12 +2008,27 @@
            const isClear = !entities.cars.some(c => (c.state === 'driving' || c.state === 'illegal-stopped') && c.dist > slotDist - 90 && c.dist < slotDist + 20);
            if(isClear) startUnpark(p);
         }
-        if(p.maneuver && mAdvance(p.maneuver, dt)){
-          const last = p.maneuver.phases[p.maneuver.phases.length-1];
-          const endPos = {x: last.P3.x, y: last.P3.y};
-          const near = nearestCarT(endPos);
-          entities.cars.push(makeCar({type: p.vehicleType, startT: near.t, speed: 0, customColors: p.customColors}));
-          p.state = 'empty';
+        if(p.maneuver){
+          if(!p.maneuverDone) p.maneuverDone = mAdvance(p.maneuver, dt);
+          if(p.maneuverDone){
+            const last = p.maneuver.phases[p.maneuver.phases.length-1];
+            const endPos = {x: last.P3.x, y: last.P3.y};
+            const near = nearestCarT(endPos);
+            const newLen = VEHICLE_TYPES[p.vehicleType].length;
+            const carPathLen = pathTotalLength(tract.carPath);
+            const mergeDist = near.t * carPathLen;
+            const tooClose = entities.cars.some(c => {
+              if(c.state !== 'driving' && c.state !== 'illegal-stopped') return false;
+              const gap = mergeDist - c.dist - (newLen + c.length)/2;
+              return gap > -newLen && gap < 22;
+            });
+            if(!tooClose){
+              entities.cars.push(makeCar({type: p.vehicleType, startT: near.t, speed: 0, customColors: p.customColors}));
+              p.state = 'empty';
+            }
+            // Se tooClose: il veicolo che esce dal parcheggio resta visibile a fine manovra
+            // finché il flusso principale non si libera (no più sparizione).
+          }
         }
       }
     });
@@ -1847,7 +2051,7 @@
           const ly = dx * sin + dy * cos;
 
           const inCollision = Math.abs(lx) < (vLen/2 - 1.5) && Math.abs(ly) < (vWid/2 - 1.5);
-          const inFront = lx > vLen/2 && lx < (vLen/2 + 5) && Math.abs(ly) < (vWid/2 + 3.5);
+          const inFront = lx > vLen/2 && lx < (vLen/2 + 20) && Math.abs(ly) < (vWid/2 + 5.5); // Stopped earlier (20px/~3m buffer) to prevent graphical overlap
           
           if(!inCollision && !inFront) return;
 
@@ -1882,7 +2086,7 @@
           const ly = dx * sin + dy * cos;
 
           const inCollision = Math.abs(lx) < (vLen/2 - 1) && Math.abs(ly) < (vWid/2 - 1);
-          const inFront = lx > vLen/2 && lx < (vLen/2 + 4.5) && Math.abs(ly) < (vWid/2 + 4);
+          const inFront = lx > vLen/2 && lx < (vLen/2 + 22) && Math.abs(ly) < (vWid/2 + 6.0); // Stopped earlier (22px/~3m buffer) to prevent graphical overlap
           
           if(!inCollision && !inFront) return;
 
@@ -1938,8 +2142,8 @@
          if(p.dead || p.t <= 0 || p.t >= 1) return;
          const pp = pointOnPath(p.path, p.t);
          const dist = Math.hypot(bp.x - pp.x, bp.y - pp.y);
-         if(dist < 5){
-           if(b.speed > 14){
+         if(dist < 15){
+           if(b.speed > 14 && dist < 5){
              p.dead = true;
              b.dead = true;
              stats.crashes++;
@@ -2283,6 +2487,40 @@
   }
 
   function drawStallMarker(slot, occupied){
+    if (slot.isZone && slot.pts && slot.pts.length >= 3) {
+      ctx.save();
+      let strokeColor = 'rgba(22,163,74,.55)';
+      if(slot.type === 'disabled') strokeColor = 'rgba(124,58,237,.7)';
+      if(slot.type === 'moto') strokeColor = 'rgba(234,179,8,.7)';
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash(occupied ? [] : [3,3]);
+      ctx.beginPath();
+      ctx.moveTo(slot.pts[0][0], slot.pts[0][1]);
+      for (let i = 1; i < slot.pts.length; i++) {
+        ctx.lineTo(slot.pts[i][0], slot.pts[i][1]);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if(slot.type === 'disabled'){
+        ctx.fillStyle = 'rgba(124,58,237,.10)';
+        ctx.fill();
+        ctx.fillStyle = 'rgba(124,58,237,.85)';
+        ctx.font = '700 10px Inter';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText('♿', slot.x, slot.y);
+      } else if(slot.type === 'moto'){
+        ctx.fillStyle = 'rgba(234,179,8,.10)';
+        ctx.fill();
+      } else {
+        ctx.fillStyle = 'rgba(22,163,74,.10)';
+        ctx.fill();
+      }
+      ctx.restore();
+      return;
+    }
+
     ctx.save();
     ctx.translate(slot.x, slot.y); ctx.rotate(slot.angle);
     const L = slot.type === 'moto' ? 14 : 28;
@@ -2349,6 +2587,9 @@
 
     if(ui.showPaths.checked){
       drawPath(tract.carPath, 'rgba(37,99,235,.5)', [], 3);
+      if(tract.carPathReverse && tract.carPathReverse.length >= 2){
+        drawPath(tract.carPathReverse, 'rgba(236,72,153,.6)', [10,5], 3);
+      }
       drawPath(tract.bikePathFwd, 'rgba(234,88,12,.55)', [8,6], 3);
       tract.crossings.forEach(c => {
         const pts = c.path;
@@ -2484,6 +2725,25 @@
       ctx.restore();
     };
     entities.sideCars.forEach(renderMergingCar);
+
+    entities.reverseCars.forEach(c => {
+      ctx.save();
+      let pos;
+      if(c.state === 'entering'){
+        const tt = Math.min(1, c.entryDist / Math.max(1, c.entryLen));
+        pos = pointOnPath(c.entryPath, tt);
+      } else if(c.state === 'reverse'){
+        pos = pointOnPath(c.revPath, Math.min(1, Math.max(0, c.t)));
+      } else if(c.state === 'exiting'){
+        const tt = Math.min(1, c.exitDist / Math.max(1, c.exitLen));
+        pos = pointOnPath(c.exitPath, tt);
+      }
+      if(pos){
+        const colors = Object.assign({}, c.customColors || {}, { length: c.length, width: c.width });
+        drawVehicle(pos.x, pos.y, pos.angle, c.type, {customColors: colors});
+      }
+      ctx.restore();
+    });
 
     entities.drivewayCars.forEach(e => {
       ctx.save();
