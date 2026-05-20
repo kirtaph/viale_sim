@@ -9,7 +9,8 @@
    'slopeChip','orientationChip','scenarioChip','stallsChip',
    'bugList','logBox',
    'statCrashes','statBrakes','statNearMisses','statParked','statParkedSub','statThrough','statThroughSub',
-   'hudCO2','hudActive','hudSpeed','scenarioGrid'
+   'hudCO2','hudActive','hudSpeed','scenarioGrid',
+   'badgeSimulationStatus','badgeActiveTract','badgeNearMisses','openOnboardingBtn','firstVisitModal','closeModalBtn','closeModalCrossBtn'
   ].forEach(k => ui[k] = document.getElementById(k));
 
   const { tractDefs, tractOrder, VEHICLE_TYPES, PROFILES } = window.VialeData;
@@ -532,6 +533,9 @@
     ui.orientationChip.textContent = tract.orientation;
     ui.scenarioChip.textContent = ui.scenarioSelect.options[ui.scenarioSelect.selectedIndex].text;
     ui.bugList.innerHTML = tract.bugs.map(x => `<li>${x}</li>`).join('');
+    if (ui.badgeActiveTract) {
+      ui.badgeActiveTract.innerHTML = `🗺️ SEZIONE: TAVOLA ${ui.tractSelect.value}`;
+    }
   }
 
   function pushLog(type, text, icon='info'){
@@ -564,6 +568,9 @@
     ui.statCrashes.textContent = stats.crashes;
     ui.statBrakes.textContent = eventsLastMinute('brake');
     ui.statNearMisses.textContent = stats.nearMisses;
+    if (ui.badgeNearMisses) {
+      ui.badgeNearMisses.innerHTML = `🛡️ ${stats.nearMisses} COLLISIONI EVITATE`;
+    }
     const occ = entities.parked.filter(p => p.state === 'parked' || p.state === 'parking').length;
     ui.statParked.textContent = occ;
     ui.statParkedSub.textContent = `${occ} / ${parkingSlots.length}`;
@@ -2585,11 +2592,69 @@
     
     resetScene(false);
   });
+  function updatePauseUI() {
+    ui.pauseBtn.textContent = paused ? '▶ Riprendi' : '⏸ Pausa';
+    if (ui.badgeSimulationStatus) {
+      if (paused) {
+        ui.badgeSimulationStatus.className = 'badge badge-warning';
+        ui.badgeSimulationStatus.innerHTML = '<span class="dot"></span> SIMULAZIONE IN PAUSA';
+      } else {
+        ui.badgeSimulationStatus.className = 'badge badge-success';
+        ui.badgeSimulationStatus.innerHTML = '<span class="dot"></span> SIMULAZIONE ATTIVA';
+      }
+    }
+  }
+
   ui.pauseBtn.addEventListener('click', () => {
     paused = !paused;
-    ui.pauseBtn.textContent = paused ? '▶ Riprendi' : '⏸ Pausa';
+    updatePauseUI();
   });
-  ui.resetBtn.addEventListener('click', () => resetScene(true));
+
+  ui.resetBtn.addEventListener('click', () => {
+    resetScene(true);
+    // Ensure badges/stats reset correctly
+    updateStats();
+  });
+
+  // Onboarding Modal Handlers
+  if (ui.openOnboardingBtn) {
+    ui.openOnboardingBtn.addEventListener('click', () => {
+      if (ui.firstVisitModal) ui.firstVisitModal.style.display = 'flex';
+    });
+  }
+
+  if (ui.closeModalBtn) {
+    ui.closeModalBtn.addEventListener('click', () => {
+      if (ui.firstVisitModal) ui.firstVisitModal.style.display = 'none';
+      localStorage.setItem('viale_onboarding_shown', 'true');
+    });
+  }
+
+  if (ui.closeModalCrossBtn) {
+    ui.closeModalCrossBtn.addEventListener('click', () => {
+      if (ui.firstVisitModal) ui.firstVisitModal.style.display = 'none';
+      localStorage.setItem('viale_onboarding_shown', 'true');
+    });
+  }
+
+  const modalBackdrop = document.querySelector('.modal-backdrop');
+  if (modalBackdrop) {
+    modalBackdrop.addEventListener('click', () => {
+      if (ui.firstVisitModal) ui.firstVisitModal.style.display = 'none';
+      localStorage.setItem('viale_onboarding_shown', 'true');
+    });
+  }
+
+  // Check first visit
+  const hasShownOnboarding = localStorage.getItem('viale_onboarding_shown');
+  if (!hasShownOnboarding) {
+    setTimeout(() => {
+      if (ui.firstVisitModal) ui.firstVisitModal.style.display = 'flex';
+    }, 600);
+  }
+
+  // Initialize status badge
+  updatePauseUI();
 
   document.getElementById('fullscreenBtn').addEventListener('click', () => {
     const wrap = document.querySelector('.stageWrap');

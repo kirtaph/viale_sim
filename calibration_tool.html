@@ -4,86 +4,379 @@
 <meta charset="UTF-8"/>
 <title>Calibrazione Traiettorie</title>
 <style>
-*{box-sizing:border-box;margin:0}
-body{font-family:Inter,Arial,sans-serif;background:#1a1a2e;color:#e0e0e0;display:flex;height:100vh;overflow:hidden}
-.sidebar{width:340px;min-width:340px;background:#16213e;padding:14px;overflow-y:auto;border-right:2px solid #0f3460;display:flex;flex-direction:column;gap:8px}
-h1{font-size:17px;color:#e94560}
-h2{font-size:12px;margin:6px 0 4px;color:#53a8b6;text-transform:uppercase;letter-spacing:.06em}
-label{display:block;font-size:12px;font-weight:700;margin-bottom:3px;color:#a0a0c0}
-select,button,input[type=text]{width:100%;height:34px;border:1px solid #0f3460;border-radius:8px;background:#1a1a2e;color:#e0e0e0;font-size:13px;font-weight:700;padding:0 8px}
-button{cursor:pointer;border:none;font-weight:900}
-.btn-pri{background:#e94560;color:#fff}
-.btn-sec{background:#0f3460;color:#e0e0e0}
-.btn-grn{background:#1f9d55;color:#fff}
-.btn-del{background:#8b0000;color:#fff}
-.btn-sm{height:28px;font-size:11px;border-radius:6px}
-.row{display:flex;gap:6px}
-.row>*{flex:1}
-.pathList{display:flex;flex-direction:column;gap:2px;max-height:280px;overflow-y:auto}
-.pItem{display:flex;align-items:center;gap:6px;padding:5px 7px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700}
-.pItem:hover,.pItem.active{background:rgba(255,255,255,.12)}
-.pItem .sw{width:12px;height:12px;border-radius:3px;flex-shrink:0}
-.pItem .ct{margin-left:auto;font-size:10px;color:#666}
-.pItem .del{margin-left:4px;background:none;border:none;color:#e94560;cursor:pointer;font-size:14px;width:auto;height:auto;padding:0 2px}
-.coords{font-family:monospace;font-size:10px;background:#111;border-radius:6px;padding:6px;max-height:120px;overflow:auto;word-break:break-all}
-.main{flex:1;overflow:auto;position:relative;padding:12px}
-canvas{display:block;cursor:crosshair}
-.status{position:fixed;bottom:12px;right:12px;background:#1f9d55;color:#fff;padding:8px 16px;border-radius:8px;font-weight:900;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:99}
-.status.show{opacity:1}
-.help{font-size:11px;color:#666;line-height:1.5}
-.help b{color:#e94560}
-.addPanel{display:flex;flex-direction:column;gap:4px;padding:8px;background:#0d1b36;border-radius:8px}
-.addPanel .row{margin-bottom:2px}
-.refPanel{font-size:11px;background:#0d1b36;padding:8px;border-radius:8px;margin-top:10px;color:#888;max-height:200px;overflow-y:auto;border:1px border solid #0f3460}
-.refPanel b{color:#53a8b6;display:block;margin-top:4px}
-.pItem .ow{font-size:10px;color:#e94560;font-weight:900;margin-left:4px}
-.pItem .tag{font-size:9px;background:#333;padding:1px 4px;border-radius:4px;margin-left:4px;color:#aaa}
-.pItem .toggle{margin-left:4px;cursor:pointer;opacity:.6}
-.pItem .toggle:hover{opacity:1}
-.row.valign{align-items:center}
-  
-  /* Collapsible Cards */
-  .card {
-    background: #16213e;
-    border: 1px solid #0f3460;
-    border-radius: 8px;
-    margin-bottom: 8px;
-    overflow: hidden;
-    transition: all 0.3s ease;
+  :root {
+    --bg: #0b0f19;
+    --panel-bg: rgba(22, 28, 45, 0.7);
+    --panel-border: rgba(255, 255, 255, 0.08);
+    --ink: #f1f5f9;
+    --ink-muted: #94a3b8;
+    --blue: #3b82f6;
+    --blue-glow: rgba(59, 130, 246, 0.3);
+    --green: #10b981;
+    --green-glow: rgba(16, 185, 129, 0.3);
+    --orange: #f97316;
+    --orange-glow: rgba(249, 115, 22, 0.3);
+    --red: #ef4444;
+    --red-glow: rgba(239, 68, 68, 0.3);
+    --purple: #8b5cf6;
+    --radius: 12px;
+    --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .sidebar {
+    width: 360px;
+    min-width: 360px;
+    background: #111827;
+    border-right: 1px solid var(--panel-border);
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .sidebar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .sidebar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+  }
+
+  h1 {
+    font-size: 18px;
+    font-weight: 800;
+    color: #fff;
+    text-align: center;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--panel-border);
+    letter-spacing: -0.02em;
+    background: linear-gradient(120deg, #ffffff 40%, #93c5fd 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  h2 {
+    font-size: 13px;
+    font-weight: 800;
+    color: #60a5fa;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Collapsible Card Design */
+  .card {
+    background: rgba(31, 41, 55, 0.4);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  }
+  
   .card-header {
-    background: #1a1a2e;
-    padding: 10px 14px;
+    background: rgba(17, 24, 39, 0.8);
+    padding: 12px 16px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     cursor: pointer;
     user-select: none;
-    border-bottom: 1px solid #0f3460;
+    transition: background 0.2s;
   }
-  .card-header:hover { background: #1f1f3a; }
-  .card-header h2 {
-    margin: 0;
-    font-size: 13px;
-    color: #53a8b6;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  .card-header:hover {
+    background: rgba(31, 41, 55, 0.8);
   }
+
   .card-header .toggle-icon {
     font-size: 10px;
     transition: transform 0.3s;
-    opacity: 0.5;
+    opacity: 0.6;
   }
-  .card.collapsed .toggle-icon { transform: rotate(-90deg); }
-  .card.collapsed .card-body { display: none; }
-  .card-body { padding: 12px; }
+  .card.collapsed .toggle-icon {
+    transform: rotate(-90deg);
+  }
+  .card.collapsed .card-body {
+    display: none;
+  }
+  .card-body {
+    padding: 16px;
+    border-top: 1px solid var(--panel-border);
+  }
+
+  label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    margin-bottom: 5px;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  select, button, input[type=text], input[type=number] {
+    width: 100%;
+    height: 38px;
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    background: rgba(17, 24, 39, 0.6);
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 0 12px;
+    outline: none;
+    transition: all 0.2s;
+  }
+
+  select:focus, input[type=text]:focus, input[type=number]:focus {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px var(--blue-glow);
+  }
+
+  button {
+    cursor: pointer;
+    font-weight: 700;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+  }
+  button:hover {
+    transform: translateY(-1px);
+  }
+  button:active {
+    transform: translateY(0);
+  }
+
+  .btn-pri { background: var(--blue); color: #fff; box-shadow: 0 4px 12px var(--blue-glow); }
+  .btn-pri:hover { background: #2563eb; box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4); }
+
+  .btn-sec { background: rgba(255, 255, 255, 0.05); color: var(--ink); border: 1px solid var(--panel-border); }
+  .btn-sec:hover { background: rgba(255, 255, 255, 0.1); }
+
+  .btn-grn { background: var(--green); color: #fff; box-shadow: 0 4px 12px var(--green-glow); }
+  .btn-grn:hover { background: #059669; box-shadow: 0 6px 16px rgba(5, 150, 105, 0.4); }
+
+  .btn-del { background: var(--red); color: #fff; box-shadow: 0 4px 12px var(--red-glow); }
+  .btn-del:hover { background: #dc2626; box-shadow: 0 6px 16px rgba(220, 38, 38, 0.4); }
+
+  .btn-sm { height: 32px; font-size: 12px; border-radius: 6px; }
+
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  .row.valign { align-items: center; }
+
+  .pathList {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .pathList::-webkit-scrollbar {
+    width: 4px;
+  }
+  .pathList::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 2px;
+  }
+
+  .pItem {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid transparent;
+    transition: all 0.2s;
+  }
+  .pItem:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.05);
+  }
+  .pItem.active {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.3);
+  }
   
-  .sidebar { gap: 0; padding: 10px; }
-  h1 { margin-bottom: 15px; text-align: center; border-bottom: 1px solid #e9456033; padding-bottom: 10px; }
-  
-  .pItem { border: 1px solid transparent; margin-bottom: 2px; background: rgba(255,255,255,0.03); }
-  .pItem.active { border-color: #e94560; background: rgba(233,69,96,0.1); }
+  .pItem .sw {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .pItem .ct {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--ink-muted);
+    background: rgba(255, 255, 255, 0.05);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .pItem .ow {
+    font-size: 9px;
+    background: rgba(249, 115, 22, 0.15);
+    color: #fdba74;
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-weight: 700;
+    margin-left: 6px;
+  }
+  .pItem .tag {
+    font-size: 9px;
+    background: rgba(59, 130, 246, 0.15);
+    color: #93c5fd;
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-weight: 700;
+    margin-left: 6px;
+  }
+  .pItem .toggle {
+    cursor: pointer;
+    opacity: 0.5;
+    font-size: 13px;
+    transition: opacity 0.2s;
+  }
+  .pItem .toggle:hover { opacity: 1; }
+  .pItem .del {
+    background: none !important;
+    border: none !important;
+    color: var(--red);
+    cursor: pointer;
+    font-size: 14px;
+    width: auto;
+    height: auto;
+    padding: 0 4px;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+
+  .main {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+    padding: 0;
+    background: #0f172a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  canvas {
+    display: block;
+    cursor: crosshair;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  }
+
+  .status {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(16, 185, 129, 0.9);
+    backdrop-filter: blur(10px);
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: var(--radius);
+    font-weight: 700;
+    font-size: 13px;
+    box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    pointer-events: none;
+    z-index: 99;
+  }
+  .status.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .hud-coordinates {
+    position: absolute;
+    top: 15px;
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--panel-border);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 12px;
+    color: #fff;
+    pointer-events: none;
+    z-index: 10;
+    box-shadow: var(--shadow);
+  }
+
+  .help {
+    font-size: 11.5px;
+    color: var(--ink-muted);
+    line-height: 1.6;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--panel-border);
+    padding: 12px;
+    border-radius: var(--radius);
+  }
+  .help b { color: #60a5fa; }
+  .help strong { color: var(--orange); }
+
+  .addPanel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .refPanel {
+    font-size: 11.5px;
+    background: rgba(31, 41, 55, 0.2);
+    padding: 12px;
+    border-radius: 8px;
+    color: var(--ink-muted);
+    line-height: 1.6;
+    border: 1px solid var(--panel-border);
+  }
+  .refPanel b { color: #53a8b6; display: block; margin-bottom: 6px; }
+
+  /* Input range premium styling */
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    background: transparent;
+  }
+  input[type=range]:focus { outline: none; }
+  input[type=range]::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 6px;
+    cursor: pointer;
+    background: rgba(255,255,255,0.1);
+    border-radius: 3px;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    height: 16px;
+    width: 16px;
+    border-radius: 50%;
+    background: var(--blue);
+    cursor: pointer;
+    -webkit-appearance: none;
+    margin-top: -5px;
+    box-shadow: 0 0 8px var(--blue-glow);
+  }
 </style>
 </head>
 <body>
@@ -109,9 +402,9 @@ canvas{display:block;cursor:crosshair}
     </div>
   </div>
 
-  <div class="card collapsed">
+  <div class="card">
     <div class="card-header" onclick="toggleCard(this)">
-      <h2>📈 Traiettorie</h2>
+      <h2>📈 Traiettorie ed Elementi</h2>
       <span class="toggle-icon">▼</span>
     </div>
     <div class="card-body" style="padding:8px">
@@ -119,7 +412,7 @@ canvas{display:block;cursor:crosshair}
     </div>
   </div>
 
-  <div class="card collapsed" id="propCard">
+  <div class="card" id="propCard">
     <div class="card-header" onclick="toggleCard(this)">
       <h2>⚙️ Proprietà Elemento</h2>
       <span class="toggle-icon">▼</span>
@@ -127,8 +420,8 @@ canvas{display:block;cursor:crosshair}
     <div class="card-body">
       <div class="addPanel">
         <div class="row valign">
-           <label style="flex:1"><input type="checkbox" id="oneWayCheck"> Senso Unico</label>
-           <select id="dirSel" style="flex:1.5;height:24px;font-size:11px">
+           <label style="flex:1; margin-bottom:0; display:flex; align-items:center; gap:6px;"><input type="checkbox" id="oneWayCheck"> Senso Unico</label>
+           <select id="dirSel" style="flex:1.5;height:34px;font-size:12px">
              <option value="both">Entrambe dir.</option>
              <option value="in">Solo Entrata</option>
              <option value="out">Solo Uscita</option>
@@ -138,7 +431,7 @@ canvas{display:block;cursor:crosshair}
     </div>
   </div>
 
-  <div class="card collapsed">
+  <div class="card">
     <div class="card-header" onclick="toggleCard(this)">
       <h2>➕ Aggiungi Elemento</h2>
       <span class="toggle-icon">▼</span>
@@ -154,16 +447,16 @@ canvas{display:block;cursor:crosshair}
             <option value="disabled">Stallo Disabili</option>
             <option value="moto">Stallo Moto</option>
             <option value="hotspot">Zona Critica</option>
-            <option value="blockage">Ostruzione (Furgone / Cantiere)</option>
+            <option value="blockage">Ostruzione (Furgone)</option>
           </select>
         </div>
-        <input type="text" id="addName" placeholder="Nome (es. Via Rossi)..." style="margin: 4px 0"/>
+        <input type="text" id="addName" placeholder="Nome (vuoto per auto-num)..." style="margin: 4px 0"/>
         <button class="btn-grn btn-sm" id="addBtn">+ Aggiungi / Posiziona</button>
       </div>
     </div>
   </div>
 
-  <div class="card collapsed">
+  <div class="card">
     <div class="card-header" onclick="toggleCard(this)">
       <h2>🛠️ Azioni Veloci</h2>
       <span class="toggle-icon">▼</span>
@@ -178,53 +471,54 @@ canvas{display:block;cursor:crosshair}
 
   <div class="card collapsed">
     <div class="card-header" onclick="toggleCard(this)">
-      <h2>📖 Info di Riferimento</h2>
-      <span class="toggle-icon">▼</span>
-    </div>
-    <div class="card-body">
-      <div class="refPanel" id="refPanel" style="margin-top:0"></div>
-    </div>
-  </div>
-
-  <div class="card collapsed">
-    <div class="card-header" onclick="toggleCard(this)">
       <h2>📏 Scala Veicoli</h2>
       <span class="toggle-icon">▼</span>
     </div>
     <div class="card-body">
-      <div style="background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px;">
+      <div style="background: rgba(255,255,255,0.02); padding: 8px; border-radius: 6px; border:1px solid var(--panel-border)">
         <div style="display:flex; gap:8px; align-items:center;">
           <input type="range" id="scaleSlider" min="0.5" max="3.0" step="0.01" value="1.0" style="flex:1">
-          <input type="number" id="scaleVal" value="1.0" step="0.01" style="width:65px; background:#1a1a2e; color:#fff; border:1px solid #444;">
+          <input type="number" id="scaleVal" value="1.0" step="0.01" style="width:65px; background:rgba(17,24,39,0.6); color:#fff; border:1px solid var(--panel-border); height:30px; border-radius:4px; text-align:center;">
         </div>
-        <div style="font-size:10px; color:#aaa; margin-top:4px;">Regola finché il SUV fantasma non occupa un parcheggio.</div>
+        <div style="font-size:10px; color:var(--ink-muted); margin-top:6px;">Regola finché il SUV fantasma giallo non occupa correttamente un parcheggio.</div>
       </div>
     </div>
   </div>
 
   <div class="card collapsed">
     <div class="card-header" onclick="toggleCard(this)">
-      <h2>💾 Salvataggio</h2>
+      <h2>💾 Salvataggio e Import</h2>
       <span class="toggle-icon">▼</span>
     </div>
-    <div class="card-body">
-      <button class="btn-grn" id="saveBtn" style="margin-bottom:8px">💾 Salva nel Simulatore</button>
+    <div class="card-body" style="display:flex; flex-direction:column; gap:8px;">
+      <button class="btn-grn" id="saveBtn">💾 Salva nel Simulatore</button>
       <div class="row">
-        <button class="btn-sec btn-sm" id="exportBtn">📋 JSON</button>
-        <button class="btn-sec btn-sm" id="downloadBtn">📥 File</button>
+        <button class="btn-sec btn-sm" id="exportBtn">📋 Copia JSON</button>
+        <button class="btn-sec btn-sm" id="downloadBtn">📥 Scarica File</button>
       </div>
-      <button class="btn-del btn-sm" id="resetStorBtn" style="margin-top:8px">🗑 Reset locale</button>
+      <button class="btn-del btn-sm" id="resetStorBtn">🗑 Ripristina Predefiniti</button>
     </div>
   </div>
 
-  <div class="help" style="margin-top:8px; padding: 0 8px">
-    <b>Click sx</b>: aggiungi punto<br>
-    <b>Drag</b>: sposta punto<br>
-    <b>Click dx</b>: rimuovi punto<br>
-    <b>Scroll</b>: zoom
+  <div class="card collapsed">
+    <div class="card-header" onclick="toggleCard(this)">
+      <h2>📖 Riferimento Tavole</h2>
+      <span class="toggle-icon">▼</span>
+    </div>
+    <div class="card-body">
+      <div class="refPanel" id="refPanel"></div>
+    </div>
   </div>
 </aside>
+
 <div class="main" id="mainArea">
+  <div class="hud-coordinates" id="coordsHud" style="left: 15px;">X: 0 | Y: 0</div>
+  <div class="hud-coordinates" style="right: 15px; left: auto; font-family: sans-serif; font-size: 11.5px; line-height: 1.5; padding: 10px 14px;">
+    🖱️ <b>Click sx</b>: Seleziona / Trascina / Aggiungi punto<br>
+    🖱️ <b>Click dx</b>: Rimuovi punto da qualsiasi elemento<br>
+    ⌨️ <b>Space + Drag</b> o <b>Mouse 3 Drag</b>: Panning mappa<br>
+    ⌨️ <b>Ctrl + Z</b>: Annulla punto | <b>Canc</b>: Elimina elemento attivo
+  </div>
   <canvas id="canvas"></canvas>
 </div>
 <div class="status" id="status"></div>
@@ -232,19 +526,10 @@ canvas{display:block;cursor:crosshair}
 <script>
 function toggleCard(header) {
   const card = header.parentElement;
-  const isCollapsed = card.classList.contains('collapsed');
+  card.classList.toggle('collapsed');
   
-  // Chiudi tutte le altre card
-  document.querySelectorAll('.sidebar .card').forEach(c => {
-    c.classList.add('collapsed');
-  });
-  
-  // Se era chiusa, aprila. Se era aperta, in questo caso l'utente vuole che rimanga aperta o si chiuda?
-  // "Se ne apro un altra chiudo quella aperta" implica che solo una è aperta.
-  // Se clicco su quella già aperta, di solito in un accordion si richiude.
-  if (isCollapsed) {
-    card.classList.remove('collapsed');
-  }
+  const title = header.querySelector('h2').textContent.trim();
+  localStorage.setItem('calib-card-' + title, card.classList.contains('collapsed') ? 'collapsed' : 'expanded');
 }
 
 (() => {
@@ -255,7 +540,7 @@ const statusEl = document.getElementById('status');
 let vehicleScale = 1.0;
 let refSUV = { x: 100, y: 100, angle: 0 };
 
-const COLORS = {carPath:'#1d72ff',bikePath:'#ff8a00',sidestreet:'#1d72ff',crossing:'rgba(255,255,255,0.4)',driveway:'#7c4dff',stall:'rgba(31,157,85,0.4)',disabled:'rgba(31,157,85,0.4)',moto:'rgba(234,179,8,0.4)',hotspot:'rgba(233,69,96,0.3)',blockage:'#e94560'};
+const COLORS = {carPath:'#3b82f6',bikePath:'#f97316',sidestreet:'#3b82f6',crossing:'rgba(255,255,255,0.4)',driveway:'#8b5cf6',stall:'rgba(16,185,129,0.3)',disabled:'rgba(59,130,246,0.3)',moto:'rgba(234,179,8,0.3)',hotspot:'rgba(239,68,68,0.25)',blockage:'#ef4444'};
 const AREA_TYPES = ['crossing','stall','disabled','moto','hotspot'];
 
 const defaultTracts = {
@@ -283,6 +568,11 @@ let paths = {};
 let hiddenPaths = new Set();
 let oneWayPaths = new Set();
 let directions = {}; // side street directions
+
+// Panning states
+let isPanning = false;
+let panStart = { x: 0, y: 0 };
+let spacePressed = false;
 
 const GRAB_R = 12;
 
@@ -458,9 +748,9 @@ function buildList() {
     const isOW = oneWayPaths.has(name);
     const dir = directions[name];
     div.innerHTML = `<span class="sw" style="background:${pathColor(name)}"></span>
-      <span style="flex:1">${pathTypeLabel(name)} ${name}${isOW?'<span class="ow">1-WAY</span>':''}${dir && dir!=='both'?'<span class="tag">'+dir.toUpperCase()+'</span>':''}</span>
-      <span class="ct">${paths[name].length}pt</span>
-      <span class="toggle" data-name="${name}" title="Toggle visibilità">${isHidden?'👁️‍🗨️':'👁️'}</span>
+      <span style="flex:1">${pathTypeLabel(name)} ${name.split(':')[1] || name}${isOW?'<span class="ow">1-WAY</span>':''}${dir && dir!=='both'?'<span class="tag">'+dir.toUpperCase()+'</span>':''}</span>
+      <span class="ct">${paths[name].length} pt</span>
+      <span class="toggle" data-name="${name}" title="Nascondi / Mostra">${isHidden?'👁️‍🗨️':'👁️'}</span>
       ${canDelete(name) ? '<button class="del" data-name="'+name+'">✕</button>' : ''}`;
     
     div.onclick = (e) => {
@@ -539,8 +829,8 @@ function render() {
         for(let i=1; i<pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
         ctx.closePath();
         ctx.fillStyle = color; ctx.fill();
-        ctx.strokeStyle = active ? '#fff' : color.replace('0.4','1').replace('0.3','1');
-        ctx.lineWidth = active ? 2 : 1;
+        ctx.strokeStyle = active ? '#fff' : color.replace('0.4','1').replace('0.3','1').replace('0.25','1');
+        ctx.lineWidth = active ? 2.5 : 1;
         ctx.stroke();
       }
     } else if(name.startsWith('blockage:')) {
@@ -581,13 +871,13 @@ function render() {
   const sw = 36 * vehicleScale, sh = 16 * vehicleScale;
   ctx.strokeRect(-sw/2, -sh/2, sw, sh);
   ctx.fillStyle = 'rgba(255,255,0,0.15)'; ctx.fillRect(-sw/2, -sh/2, sw, sh);
-  ctx.fillStyle = '#ffff00'; ctx.font = 'bold 14px Inter, sans-serif';
+  ctx.fillStyle = '#ffff00'; ctx.font = 'bold 12px Inter, sans-serif';
   ctx.textAlign = 'center';
   ctx.shadowBlur = 4; ctx.shadowColor = '#000';
   ctx.fillText('SUV DI RIFERIMENTO (5m)', 0, -sh/2 - 12);
   ctx.restore();
 
-  ctx.restore(); // Restore high-resolution scale context
+  ctx.restore(); // Restore scale context
 }
 
 function canvasXY(e) {
@@ -607,50 +897,165 @@ function ptSegDist(px,py,a,b) {
   return Math.hypot(px-(a[0]+t*dx),py-(a[1]+t*dy));
 }
 
+// Keyboards event
+window.addEventListener('keydown', e => {
+  if(e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+
+  if (e.code === 'Space') {
+    e.preventDefault();
+    spacePressed = true;
+    canvas.style.cursor = 'grab';
+  }
+
+  // Ctrl+Z for Undo
+  if (e.ctrlKey && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    document.getElementById('undoBtn').click();
+  }
+
+  // Ctrl+S for Save
+  if (e.ctrlKey && e.key.toLowerCase() === 's') {
+    e.preventDefault();
+    document.getElementById('saveBtn').click();
+  }
+
+  // Canc/Delete to remove active path
+  if (e.key === 'Delete') {
+    if (canDelete(activePath)) {
+      if (confirm(`Eliminare l'intero elemento "${activePath}"?`)) {
+        delete paths[activePath];
+        activePath = 'carPath';
+        syncPropUI();
+        buildList();
+        render();
+        flash('Elemento eliminato');
+      }
+    } else {
+      // If it is a base path, just clear its points
+      if (confirm(`Svuotare tutti i punti di "${activePath}"?`)) {
+        paths[activePath] = [];
+        buildList();
+        render();
+      }
+    }
+  }
+});
+
+window.addEventListener('keyup', e => {
+  if (e.code === 'Space') {
+    spacePressed = false;
+    canvas.style.cursor = 'crosshair';
+  }
+});
+
 canvas.addEventListener('mousedown', e => {
   e.preventDefault();
   const [x,y] = canvasXY(e);
   
+  // Panning check: Space + Left click OR Middle click
+  if (e.button === 1 || (e.button === 0 && spacePressed)) {
+    isPanning = true;
+    panStart = { x: e.clientX, y: e.clientY };
+    canvas.style.cursor = 'grabbing';
+    return;
+  }
+
   // SUV Drag/Rotate Check
   if(Math.hypot(refSUV.x - x, refSUV.y - y) < 50 / zoom){
     dragging = 'suv';
     return;
   }
 
-  const pts = paths[activePath];
-  if(!pts) return;
+  // Delete point with Right Click (from ANY visible path)
+  if(e.button === 2) {
+    let foundDeletePath = null;
+    let foundDeleteIdx = -1;
+    let bestDeleteDist = GRAB_R/zoom + 15;
 
-  if(e.button===2) {
-    const {idx,dist}=findNearest(pts,x,y);
-    if(idx>=0 && dist<GRAB_R/zoom+15) { pts.splice(idx,1); buildList(); render(); }
+    Object.keys(paths).forEach(name => {
+      if(hiddenPaths.has(name)) return;
+      const pts = paths[name];
+      const {idx, dist} = findNearest(pts, x, y);
+      if(idx >= 0 && dist < bestDeleteDist) {
+        bestDeleteDist = dist;
+        foundDeletePath = name;
+        foundDeleteIdx = idx;
+      }
+    });
+
+    if (foundDeletePath) {
+      paths[foundDeletePath].splice(foundDeleteIdx, 1);
+      activePath = foundDeletePath;
+      syncPropUI();
+      buildList();
+      render();
+      flash('Punto rimosso');
+    }
     return;
   }
 
-  const {idx,dist}=findNearest(pts,x,y);
-  if(idx>=0 && dist<GRAB_R/zoom+8) {
-    dragging=idx;
-  } else {
-    if(activePath.startsWith('blockage:') && pts.length >= 1) {
-      dragging=0; pts[0]=[x,y];
-    } else {
-      let bestIdx=pts.length;
-      if(pts.length>=2 && !activePath.startsWith('hotspot:')) {
-        let bestD=1e9;
-        let insertIdx=pts.length;
-        for(let i=0;i<pts.length-1;i++) { const d=ptSegDist(x,y,pts[i],pts[i+1]); if(d<bestD){bestD=d;insertIdx=i+1;} }
-        if(bestD < 20 / zoom) bestIdx=insertIdx;
-        if(Math.hypot(x-pts[0][0],y-pts[0][1])<30/zoom) bestIdx=0;
-        if(Math.hypot(x-pts[pts.length-1][0],y-pts[pts.length-1][1])<30/zoom) bestIdx=pts.length;
-      }
-      pts.splice(bestIdx,0,[x,y]);
-      dragging=bestIdx;
+  // Grab point of ANY visible path to drag and make active
+  let foundPath = null;
+  let foundPtIdx = -1;
+  let bestDist = GRAB_R/zoom + 8;
+
+  Object.keys(paths).forEach(name => {
+    if(hiddenPaths.has(name)) return;
+    const pts = paths[name];
+    const {idx, dist} = findNearest(pts, x, y);
+    if(idx >= 0 && dist < bestDist) {
+      bestDist = dist;
+      foundPath = name;
+      foundPtIdx = idx;
     }
-    buildList(); render();
+  });
+
+  if (foundPath) {
+    activePath = foundPath;
+    dragging = foundPtIdx;
+    syncPropUI();
+    buildList();
+    render();
+    return;
   }
+
+  // Otherwise, click on blank area: add point to currently active path
+  const pts = paths[activePath];
+  if(!pts) return;
+
+  if(activePath.startsWith('blockage:') && pts.length >= 1) {
+    dragging=0; pts[0]=[x,y];
+  } else {
+    let bestIdx=pts.length;
+    if(pts.length>=2 && !activePath.startsWith('hotspot:')) {
+      let bestD=1e9;
+      let insertIdx=pts.length;
+      for(let i=0;i<pts.length-1;i++) { const d=ptSegDist(x,y,pts[i],pts[i+1]); if(d<bestD){bestD=d;insertIdx=i+1;} }
+      if(bestD < 20 / zoom) bestIdx=insertIdx;
+      if(Math.hypot(x-pts[0][0],y-pts[0][1])<30/zoom) bestIdx=0;
+      if(Math.hypot(x-pts[pts.length-1][0],y-pts[pts.length-1][1])<30/zoom) bestIdx=pts.length;
+    }
+    pts.splice(bestIdx,0,[x,y]);
+    dragging=bestIdx;
+  }
+  buildList(); render();
 });
+
 canvas.addEventListener('mousemove', e => {
-  if(dragging===null) return;
   const [x,y]=canvasXY(e);
+  const coordsHud = document.getElementById('coordsHud');
+  if(coordsHud) coordsHud.textContent = `X: ${x} | Y: ${y}`;
+
+  if (isPanning) {
+    const dx = e.clientX - panStart.x;
+    const dy = e.clientY - panStart.y;
+    mainArea.scrollLeft -= dx;
+    mainArea.scrollTop -= dy;
+    panStart = { x: e.clientX, y: e.clientY };
+    return;
+  }
+
+  if(dragging===null) return;
   
   if(dragging === 'suv'){
     if(e.altKey){
@@ -665,27 +1070,47 @@ canvas.addEventListener('mousemove', e => {
   paths[activePath][dragging]=[x,y];
   render();
 });
-canvas.addEventListener('mouseup', () => { dragging=null; });
-canvas.addEventListener('mouseleave', () => { dragging=null; });
+
+canvas.addEventListener('mouseup', () => {
+  if (isPanning) {
+    isPanning = false;
+    canvas.style.cursor = spacePressed ? 'grab' : 'crosshair';
+  }
+  dragging=null;
+});
+canvas.addEventListener('mouseleave', () => {
+  isPanning = false;
+  dragging=null;
+});
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 document.getElementById('addBtn').onclick = () => {
   const type = document.getElementById('addType').value;
-  const name = document.getElementById('addName').value.trim() || 'nuovo';
+  const nameInput = document.getElementById('addName');
+  let name = nameInput.value.trim();
+  
+  if(!name) {
+    // Auto-generate name based on count
+    let count = 1;
+    while(paths[type + ':' + count]) {
+      count++;
+    }
+    name = count.toString();
+  }
+
   const key = type + ':' + name;
   if(paths[key]) { alert('Esiste già un elemento con questo nome'); return; }
   
-  // Inizializza come array vuoto per permettere il posizionamento manuale
   paths[key] = [];
-  
   activePath = key;
+  nameInput.value = ''; // clear input
+  
   syncPropUI(); buildList(); render();
   flash('Fai click sulla mappa per posizionare il primo punto di: ' + name);
   
-  // Apri il card delle proprietà e chiudi gli altri
+  // Expand property card
   const propCard = document.getElementById('propCard');
-  if(propCard) {
-    document.querySelectorAll('.sidebar .card').forEach(c => c.classList.add('collapsed'));
+  if(propCard && propCard.classList.contains('collapsed')) {
     propCard.classList.remove('collapsed');
   }
 };
@@ -695,7 +1120,7 @@ document.getElementById('undoBtn').onclick = () => {
   if(pts&&pts.length){pts.pop(); buildList(); render();}
 };
 document.getElementById('clearBtn').onclick = () => {
-  if(!confirm('Svuotare?')) return;
+  if(!confirm('Svuotare tutti i punti di questo elemento?')) return;
   paths[activePath]=[]; buildList(); render();
 };
 
@@ -744,7 +1169,7 @@ document.getElementById('exportBtn').onclick = () => {
     allData[k] = stored || defaultPaths[k];
   });
   allData[currentKey] = editableToTract(paths);
-  navigator.clipboard.writeText(JSON.stringify(allData, null, 2)).then(() => flash('📋 Copiato!'));
+  navigator.clipboard.writeText(JSON.stringify(allData, null, 2)).then(() => flash('📋 JSON Copiato negli appunti!'));
 };
 
 document.getElementById('downloadBtn').onclick = () => {
@@ -761,13 +1186,27 @@ document.getElementById('downloadBtn').onclick = () => {
 };
 
 document.getElementById('resetStorBtn').onclick = () => {
-  if(!confirm('Reset tavola?')) return;
+  if(!confirm('Reset di questa tavola ai dati predefiniti?')) return;
   localStorage.removeItem('viale_tract_'+currentKey); loadTract();
+  flash('Tavola ripristinata!');
 };
 
 async function initApp() {
   await loadCalibrationFile();
   loadTract();
+
+  // Restore saved card states
+  document.querySelectorAll('.sidebar .card').forEach(card => {
+    const header = card.querySelector('.card-header');
+    if (!header) return;
+    const title = header.querySelector('h2').textContent.trim();
+    const savedState = localStorage.getItem('calib-card-' + title);
+    if (savedState === 'expanded') {
+      card.classList.remove('collapsed');
+    } else if (savedState === 'collapsed') {
+      card.classList.add('collapsed');
+    }
+  });
 }
 initApp();
 })();

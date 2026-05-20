@@ -10,16 +10,71 @@
   <link rel="stylesheet" href="src/style.css" />
 </head>
 <body>
+
+<!-- Modal for first-time guide -->
+<div id="firstVisitModal" class="modal" style="display:none;">
+  <div class="modal-backdrop"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>👋 Benvenuto al Simulatore Stradale</h2>
+      <button id="closeModalCrossBtn" class="modal-close-cross" title="Chiudi">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p>Questo simulatore interattivo visualizza in tempo reale l'impatto del traffico, della sosta e della ciclabilità su <strong>Viale Martiri d'Ungheria</strong> a Ginosa (TA).</p>
+      
+      <div class="modal-feature-list">
+        <div class="modal-feature-item">
+          <span class="feature-icon">🚗</span>
+          <div>
+            <h4>Comportamento Realistico dei Veicoli</h4>
+            <p>Le auto rispettano le distanze di sicurezza, frenano agli attraversamenti pedonali, danno la precedenza e usano gli stalli di sosta per parcheggiare.</p>
+          </div>
+        </div>
+        <div class="modal-feature-item">
+          <span class="feature-icon">🎛️</span>
+          <div>
+            <h4>Regolazione dei Flussi in Tempo Reale</h4>
+            <p>Usa la barra laterale per variare i flussi di auto, biciclette, pedoni e la frequenza delle manovre di parcheggio.</p>
+          </div>
+        </div>
+        <div class="modal-feature-item">
+          <span class="feature-icon">💡</span>
+          <div>
+            <h4>Scenari e Profilazione della Domanda</h4>
+            <p>Seleziona scenari predefiniti (come l'ora di punta scolastica o la sosta selvaggia) per osservare come risponde il sistema stradale.</p>
+          </div>
+        </div>
+        <div class="modal-feature-item">
+          <span class="feature-icon">🛡️</span>
+          <div>
+            <h4>Monitoraggio dei Conflitti</h4>
+            <p>Il simulatore registra gli incidenti evitati (near-misses), le frenate brusche e le emissioni di CO₂ in eccesso generate dalle code.</p>
+          </div>
+        </div>
+      </div>
+      
+      <p class="modal-tip">💡 <strong>Consiglio:</strong> Usa il pulsante <strong>☰</strong> in alto a sinistra del simulatore per nascondere la barra laterale e ingrandire l'area di visualizzazione.</p>
+    </div>
+    <div class="modal-footer">
+      <button id="closeModalBtn" class="btnPrimary">Esplora la Simulazione</button>
+    </div>
+  </div>
+</div>
+
 <div class="page">
   <section class="hero">
     <div class="hero-text">
-      <h1>Simulazione del traffico — V.le Martiri d'Ungheria</h1>
-      <p>Ginosa (TA). Veicoli misti (city car, SUV, furgoni, camioncini, moto) che si comportano in modo realistico: rispettano la distanza di sicurezza, si fermano agli attraversamenti, danno la precedenza in immissione e usano davvero gli stalli di sosta.</p>
+      <img src="viale_sim_assets/logo_comitato.jpg" class="comitato-logo" alt="Logo Comitato" />
+      <div class="hero-info">
+        <h1>Simulazione del traffico — V.le Martiri d'Ungheria</h1>
+        <p>Ginosa (TA). Veicoli misti (city car, SUV, furgoni, camioncini, moto) che si comportano in modo realistico: rispettano la distanza di sicurezza, si fermano agli attraversamenti, danno la precedenza in immissione e usano davvero gli stalli di sosta.</p>
+      </div>
     </div>
     <div class="hero-meta">
-      <span class="badge"><span class="dot"></span> live</span>
-      <span class="badge">5 tavole · D–H</span>
-      <span class="badge">collisioni evitate</span>
+      <span class="badge badge-success" id="badgeSimulationStatus"><span class="dot"></span> SIMULAZIONE ATTIVA</span>
+      <span class="badge badge-info" id="badgeActiveTract">🗺️ SEZIONE: TAVOLA D</span>
+      <span class="badge badge-warning" id="badgeNearMisses">🛡️ 0 COLLISIONI EVITATE</span>
+      <button class="badge btn-guide" id="openOnboardingBtn" title="Mostra Guida">❓ Guida Simulatore</button>
     </div>
   </section>
   
