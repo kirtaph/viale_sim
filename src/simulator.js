@@ -469,6 +469,7 @@
           const vy = slot.y + Math.sin(slot.angle) * offset;
           const near = nearestCarT({x: vx, y: vy});
           
+          const customColors = getRandomVehicleColors(vType);
           entities.parked.push({
             id: slot.id + '_' + entities.parked.length,
             x: vx, y: vy, angle: slot.angle,
@@ -477,7 +478,8 @@
             parentName: slot.parentName,
             entryT: near.t,
             entryAngle: slot.angle, // Parallel to zone
-            isBay: false // Zones are typically parallel
+            isBay: false, // Zones are typically parallel
+            customColors
           });
           
           used += vLen + rand(2, 6) * (tract.scale || 1.0); // Gap scaled with vehicle size
@@ -485,6 +487,7 @@
       } else {
         if(Math.random() < fillRate){
           const type = slot.type==='disabled' ? 'citycar' : (slot.type==='moto' ? 'motorbike' : pickVehicleType());
+          const customColors = getRandomVehicleColors(type);
           entities.parked.push({
             id: slot.id,
             x: slot.x, y: slot.y, angle: slot.angle,
@@ -493,7 +496,8 @@
             parentName: slot.parentName,
             entryT: slot.entryT,
             entryAngle: slot.entryAngle,
-            isBay: slot.isBay
+            isBay: slot.isBay,
+            customColors
           });
         }
       }
@@ -560,6 +564,7 @@
     const startT = (opts.startT !== undefined) ? opts.startT : -0.08;
     const pathLen = pathTotalLength(tract.carPath);
     const maxSpeed = carBaseSpeed() * (VEHICLE_TYPES[type].speedFactor) * speedVar * s;
+    const customColors = opts.customColors || getRandomVehicleColors(type);
     return {
       id: Math.random().toString(36).substr(2, 5),
       type,
@@ -570,7 +575,8 @@
       accel: VEHICLE_TYPES[type].accel * s, decel: VEHICLE_TYPES[type].decel * s,
       length: def.length, width: def.width,
       state: 'driving',
-      _emergencyHold: 0
+      _emergencyHold: 0,
+      customColors
     };
   }
   function spawnCar(opts){
@@ -581,7 +587,7 @@
     if(tooClose) return false;
     const c = makeCar(opts || {});
     
-    if(tract.turnInStreets && tract.turnInStreets.length > 0 && Math.random() < 0.15 && !c.targetSlot && c.type !== 'van' && c.type !== 'truck'){
+    if(tract.turnInStreets && tract.turnInStreets.length > 0 && Math.random() < 0.35 && !c.targetSlot && c.type !== 'van' && c.type !== 'truck'){
        const valid = tract.turnInStreets.filter(s => s.intersectT > c.t + 0.1);
        if(valid.length > 0){
           c.targetSideStreet = valid[Math.floor(rand(0, valid.length))];
@@ -609,10 +615,12 @@
     });
     if(bikeBusy) return false;
 
+    const colors = getRandomBikeColors();
     entities.bikes.push({
       dir, t: startT, dist: startT === -0.08 ? -0.08 * pathTotalLength(tract.bikePathFwd) : 1.08 * pathTotalLength(tract.bikePathFwd),
       baseSpeed: bikeBaseSpeed() * rand(0.75, 1.25) * s,
-      _emergencyHold: 0
+      _emergencyHold: 0,
+      customColors: colors
     });
     return true;
   }
@@ -624,10 +632,32 @@
     if(!path || !path.length) return;
     const dir = Math.random() < .5 ? 1 : -1;
     const ordered = dir === 1 ? path : [...path].reverse();
+    
+    const randType = Math.random();
+    let wheelchair = false;
+    let elderly = false;
+    let child = false;
+    let speedMult = 1.0;
+    
+    if(randType < 0.06){
+      wheelchair = true;
+      speedMult = 0.7;
+    } else if(randType < 0.24){
+      elderly = true;
+      speedMult = 0.65;
+    } else if(randType < 0.38){
+      child = true;
+      speedMult = 1.15;
+    }
+    
+    const colors = getRandomPedColors(elderly, wheelchair, child);
     entities.peds.push({
       path: ordered, crossing, t: 0, dist:0,
-      baseSpeed: rand(14, 26) * s,
-      wheelchair: Math.random() < 0.08
+      baseSpeed: rand(14, 26) * s * speedMult,
+      wheelchair,
+      elderly,
+      child,
+      customColors: colors
     });
   }
   function spawnDrivewayCar(){
@@ -638,10 +668,12 @@
     const busy = entities.drivewayCars.some(o => o.path === d.path && o.dist < 50);
     if(busy) return;
     const s = (tract && tract.scale) ? tract.scale : 1.0;
+    const customColors = getRandomVehicleColors(type);
     entities.drivewayCars.push({
       type, ...vDim(type),
       path:d.path, t:-0.08, dist:-0.08 * len, baseSpeed: (len/7) * s, name:d.name,
-      state:'travelling', _emergencyHold: 0
+      state:'travelling', _emergencyHold: 0,
+      customColors
     });
   }
   function spawnSideStreetCar(){
@@ -654,17 +686,23 @@
     const busy = entities.sideCars.some(o => o.path === s.path && o.dist < 50);
     if(busy) return;
     const sc = (tract && tract.scale) ? tract.scale : 1.0;
+    const customColors = getRandomVehicleColors(type);
     entities.sideCars.push({
       type, ...vDim(type),
       path:s.path, t:-0.08, dist:-0.08 * len, baseSpeed: (len/3.5) * sc, name:s.name,
-      state:'travelling', _emergencyHold: 0
+      state:'travelling', _emergencyHold: 0,
+      customColors
     });
   }
   function spawnDisabledUser(){
     if(!tract.disabled || !tract.disabled.length) return;
     const d = tract.disabled[Math.floor(rand(0, tract.disabled.length))];
     const len = pathTotalLength(d.path);
-    entities.peds.push({path:d.path, t:0, dist:0, baseSpeed: len/9, wheelchair:true, crossing:null});
+    const colors = getRandomPedColors(false, true, false);
+    entities.peds.push({
+      path:d.path, t:0, dist:0, baseSpeed: (len/9) * (tract.scale || 1.0),
+      wheelchair:true, elderly:false, child:false, customColors: colors
+    });
   }
   function spawnDeliveryVan(){
     if(entities.cars.some(c => c.type==='van' && c.targetSlot)) return;
@@ -769,8 +807,15 @@
        spawnDrivewayCar();
        spawners.driveway = scenario==='driveway_conflict' ? rand(15, 30) : rand(50, 100);
     }
-    if((scenario==='school_peak' || scenario==='driveway_conflict') && spawners.side <= 0 && tract.sideStreets){
-       spawnSideStreetCar(); spawners.side = rand(6, 12);
+    if(spawners.side <= 0 && tract.sideStreets && tract.sideStreets.length > 0){
+       spawnSideStreetCar();
+       const carRate = Number(ui.carFlow.value);
+       if(carRate > 0){
+         const baseInterval = (scenario==='school_peak' || scenario==='driveway_conflict') ? rand(6, 12) : rand(12, 28);
+         spawners.side = baseInterval * (30 / Math.max(10, carRate));
+       } else {
+         spawners.side = 9999;
+       }
     }
     if(scenario==='vulnerable_users' && spawners.special <= 0 && tract.disabled.length){
        spawnDisabledUser(); spawners.special = rand(15, 30);
@@ -1181,9 +1226,8 @@
            if(safeTarget < target){
              target = safeTarget;
              braking = true;
-             const pedYielding = entities.peds.some(p => p.crossing === cct.crossing && p.stopReason === 'VEHICLE_IN_WAY');
-             const pedOnStripes = entities.peds.some(p => p.crossing === cct.crossing && p.t >= 0.15 && p.t <= 0.85);
-             if(pedOnStripes || !pedYielding){
+             const pedActive = entities.peds.some(p => p.crossing === cct.crossing && p.t >= 0.03 && p.t <= 0.97 && p.stopReason !== 'CAR_TOO_CLOSE');
+             if(distToCrossing < 65 && pedActive){
                 target = 0;
                 c.stopReason = 'PED_X';
              }
@@ -1325,6 +1369,7 @@
             const sidewalkX = carPos.x + 22 * Math.cos(carPos.angle + Math.PI/2);
             const sidewalkY = carPos.y + 22 * Math.sin(carPos.angle + Math.PI/2);
             const pedPath = [[passengerX, passengerY], [sidewalkX, sidewalkY]];
+            const colors = getRandomPedColors(true, false, false);
             entities.peds.push({
               path: pedPath,
               t: 0,
@@ -1332,7 +1377,9 @@
               baseSpeed: 7,
               elderly: true,
               wheelchair: false,
-              crossing: null
+              child: false,
+              crossing: null,
+              customColors: colors
             });
             pushLog('dropoff', "🚶‍♂️ L'anziano scende dal veicolo ed attraversa lentamente verso il marciapiede.");
           }
@@ -1478,11 +1525,30 @@
           const def = VEHICLE_TYPES[v.type] || {length:30, width:16};
           let vPos, vAngle;
           if(v.state === 'merging'){
-            vPos = { x: lerp(v.mergeStart.x, v.mergeEnd.x, v.mergeAnimT), y: lerp(v.mergeStart.y, v.mergeEnd.y, v.mergeAnimT) };
-            const aDiff = v.mergeAngle1 - v.mergeAngle0;
-            vAngle = v.mergeAngle0 + aDiff * v.mergeAnimT;
-            if(aDiff > Math.PI) vAngle = v.mergeAngle0 + (aDiff - Math.PI*2)*v.mergeAnimT;
-            if(aDiff < -Math.PI) vAngle = v.mergeAngle0 + (aDiff + Math.PI*2)*v.mergeAnimT;
+            const t = Math.min(1, Math.max(0, v.mergeAnimT));
+            const dist = Math.hypot(v.mergeEnd.x - v.mergeStart.x, v.mergeEnd.y - v.mergeStart.y) || 1;
+            
+            // Control Point 1 (along side-street direction)
+            const L1 = dist * 0.45;
+            const P1x = v.mergeStart.x + Math.cos(v.mergeAngle0) * L1;
+            const P1y = v.mergeStart.y + Math.sin(v.mergeAngle0) * L1;
+            
+            // Control Point 2 (along main road direction, backwards from mergeEnd)
+            const L2 = dist * 0.45;
+            const P2x = v.mergeEnd.x - Math.cos(v.mergeAngle1) * L2;
+            const P2y = v.mergeEnd.y - Math.sin(v.mergeAngle1) * L2;
+            
+            // Cubic Bezier position
+            const mt = 1 - t;
+            vPos = {
+              x: mt*mt*mt * v.mergeStart.x + 3 * mt*mt*t * P1x + 3 * mt*t*t * P2x + t*t*t * v.mergeEnd.x,
+              y: mt*mt*mt * v.mergeStart.y + 3 * mt*mt*t * P1y + 3 * mt*t*t * P2y + t*t*t * v.mergeEnd.y
+            };
+            
+            // Tangent angle
+            const dx = 3*mt*mt * (P1x - v.mergeStart.x) + 6*mt*t * (P2x - P1x) + 3*t*t * (v.mergeEnd.x - P2x);
+            const dy = 3*mt*mt * (P1y - v.mergeStart.y) + 6*mt*t * (P2y - P1y) + 3*t*t * (v.mergeEnd.y - P2y);
+            vAngle = Math.atan2(dy, dx);
           } else if(v.state === 'driving' || v.state === 'travelling' || v.state === 'yielding' || v.state === 'illegal-stopped'){
              const path = v.path || tract.carPath;
              vPos = pointOnPath(path, v.t);
@@ -1499,11 +1565,19 @@
           const sin = Math.sin(-vAngle);
           const lx = dx * cos - dy * sin;
           const ly = dx * sin + dy * cos;
-
+ 
           const scale = tract.scale || 1.0;
-          const vSpeed = v.speed || 0;
+          let vSpeed = v.speed;
+          if(vSpeed === undefined && (v.state === 'yielding' || v.state === 'parking' || v.state === 'maneuver-in')){
+             vSpeed = 0;
+          } else if(vSpeed === undefined){
+             vSpeed = v.baseSpeed || 0;
+          }
+          
           if(lx > -def.length/2 - 10*scale && lx < def.length/2 + 2*scale && Math.abs(ly) < def.width/2 + 8*scale){
-             if(vSpeed > 0.5 || Math.abs(lx) < def.length/2 - 2*scale){
+             const isCarMoving = vSpeed > 2.0;
+             const isOverlappingDeep = Math.abs(lx) < def.length/2 - 5*scale;
+             if(isCarMoving || isOverlappingDeep){
                 pedMod = 0; p.stopReason = 'VEHICLE_IN_WAY'; return true;
              }
           }
@@ -1682,7 +1756,7 @@
           });
           if(!tooClose){
             const baseRoadSpeed = carBaseSpeed() * VEHICLE_TYPES[e.type].speedFactor;
-            entities.cars.push(makeCar({type:e.type, startT: e.mergeT, speed: baseRoadSpeed * 0.55}));
+            entities.cars.push(makeCar({type:e.type, startT: e.mergeT, speed: baseRoadSpeed * 0.55, customColors: e.customColors}));
           }
           e.state = 'done';
         }
@@ -1715,7 +1789,7 @@
           const last = p.maneuver.phases[p.maneuver.phases.length-1];
           const endPos = {x: last.P3.x, y: last.P3.y};
           const near = nearestCarT(endPos);
-          entities.cars.push(makeCar({type: p.vehicleType, startT: near.t, speed: 0}));
+          entities.cars.push(makeCar({type: p.vehicleType, startT: near.t, speed: 0, customColors: p.customColors}));
           p.state = 'empty';
         }
       }
@@ -1890,9 +1964,96 @@
     return `rgb(${cl(r)},${cl(g)},${cl(b)})`;
   }
 
+  function getRandomVehicleColors(type){
+    const list = {
+      citycar: [
+        {body:'#dc2626', accent:'#991b1b'}, // Rosso corsa
+        {body:'#2563eb', accent:'#1d4ed8'}, // Blu reale
+        {body:'#64748b', accent:'#475569'}, // Grigio metallico
+        {body:'#374151', accent:'#1f2937'}, // Grigio grafite
+        {body:'#059669', accent:'#047857'}, // Verde foresta
+        {body:'#eab308', accent:'#ca8a04'}, // Giallo limone
+        {body:'#ea580c', accent:'#c2410c'}, // Arancione sport
+        {body:'#8b5cf6', accent:'#6d28d9'}  // Viola ametista
+      ],
+      suv: [
+        {body:'#1e293b', accent:'#020617'}, // Nero carbonio
+        {body:'#475569', accent:'#334155'}, // Grigio scuro
+        {body:'#b45309', accent:'#78350f'}, // Bronzo caldo
+        {body:'#0f766e', accent:'#115e59'}, // Verde petrolio
+        {body:'#3f6212', accent:'#1a2e05'}  // Verde oliva militar
+      ],
+      van: [
+        {body:'#4b5563', accent:'#1f2937'}, // Grigio antracite
+        {body:'#94a3b8', accent:'#64748b'}, // Grigio metallo
+        {body:'#f59e0b', accent:'#d97706'}, // Giallo spedizioni
+        {body:'#1e3a8a', accent:'#172554'}, // Blu profondo
+        {body:'#b91c1c', accent:'#7f1d1d'}  // Rosso corriere
+      ],
+      truck: [
+        {body:'#d97706', accent:'#92400e'}, // Arancione cantiere
+        {body:'#1d4ed8', accent:'#1e3a8a'}, // Blu industriale
+        {body:'#dc2626', accent:'#991b1b'}, // Rosso carico
+        {body:'#15803d', accent:'#166534'}  // Verde tecnico
+      ],
+      motorbike: [
+        {body:'#fbbf24', accent:'#b45309'}, // Giallo corsa
+        {body:'#ef4444', accent:'#991b1b'}, // Rosso fuoco
+        {body:'#10b981', accent:'#065f46'}, // Verde ninja
+        {body:'#0f172a', accent:'#020617'}, // Nero opaco
+        {body:'#f97316', accent:'#ea580c'}  // Arancione cross
+      ],
+      ambulance: [
+        {body:'#f8fafc', accent:'#dc2626'}
+      ]
+    };
+    const choices = list[type] || [{body:'#3b82f6', accent:'#1d4ed8'}];
+    const pick = choices[Math.floor(rand(0, choices.length))];
+    const s = (tract && tract.scale) ? tract.scale : 1.0;
+    const def = VEHICLE_TYPES[type] || VEHICLE_TYPES.citycar;
+    return {
+      body: pick.body,
+      accent: pick.accent,
+      glass: type === 'motorbike' ? '#fecaca' : '#bfdbfe',
+      length: def.length * s,
+      width: def.width * s
+    };
+  }
+
+  function getRandomBikeColors(){
+    const frames = ['#ea580c', '#3b82f6', '#10b981', '#ef4444', '#a855f7', '#0f172a', '#eab308'];
+    const helmets = ['#1e293b', '#e2e8f0', '#dc2626', '#1d4ed8', '#16a34a', '#d97706'];
+    const shirts = ['#f59e0b', '#3b82f6', '#10b981', '#ec4899', '#f43f5e', '#6366f1', '#14b8a6'];
+    return {
+      frame: frames[Math.floor(rand(0, frames.length))],
+      helmet: helmets[Math.floor(rand(0, helmets.length))],
+      shirt: shirts[Math.floor(rand(0, shirts.length))]
+    };
+  }
+
+  function getRandomPedColors(elderly=false, wheelchair=false, child=false){
+    const hairColors = elderly 
+      ? ['#e2e8f0', '#cbd5e1', '#94a3b8', '#ffffff']
+      : ['#f59e0b', '#7c2d12', '#0f172a', '#b45309', '#ca8a04', '#1e293b'];
+      
+    const clothesColors = child
+      ? ['#ef4444', '#3b82f6', '#10b981', '#ec4899', '#f43f5e', '#6366f1', '#eab308']
+      : ['#1e293b', '#0284c7', '#059669', '#b91c1c', '#4f46e5', '#db2777', '#d97706', '#475569'];
+      
+    const caneColors = ['#78350f', '#451a03', '#1e293b', '#b45309'];
+    const backpackColors = ['#f43f5e', '#06b6d4', '#eab308', '#a855f7', '#10b981'];
+    
+    return {
+      hair: hairColors[Math.floor(rand(0, hairColors.length))],
+      clothes: clothesColors[Math.floor(rand(0, clothesColors.length))],
+      cane: caneColors[Math.floor(rand(0, caneColors.length))],
+      backpack: backpackColors[Math.floor(rand(0, backpackColors.length))]
+    };
+  }
+
     function drawVehicle(x, y, angle, type, opts={}){
-    const def = vDim(type);
-    const L = def.length, W = def.width;
+    const def = opts.customColors || vDim(type);
+    const L = def.length || vDim(type).length, W = def.width || vDim(type).width;
     ctx.save();
     ctx.translate(x, y); ctx.rotate(angle);
     ctx.fillStyle = 'rgba(15,23,42,.2)';
@@ -2005,8 +2166,9 @@
     ctx.restore();
   }
 
-  function drawBike(x,y,angle,dir){
+  function drawBike(x, y, angle, dir, customColors){
     const s = (tract && tract.scale) ? tract.scale : 1.0;
+    const colors = customColors || { frame: '#ea580c', helmet: '#1e293b', shirt: '#f59e0b' };
     ctx.save();
     ctx.translate(x,y); 
     ctx.rotate(angle);
@@ -2017,42 +2179,53 @@
     ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1.6;
     ctx.beginPath(); ctx.arc(-8,2,4,0,Math.PI*2); ctx.stroke();
     ctx.beginPath(); ctx.arc(8,2,4,0,Math.PI*2); ctx.stroke();
-    ctx.strokeStyle = '#ea580c'; ctx.lineWidth = 2;
+    ctx.strokeStyle = colors.frame; ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(-8,2); ctx.lineTo(0,-2); ctx.lineTo(8,2);
     ctx.moveTo(0,-2); ctx.lineTo(2,-7);
     ctx.stroke();
-    ctx.fillStyle = '#1e293b';
+    ctx.fillStyle = colors.helmet;
     ctx.beginPath(); ctx.arc(2,-9,2.6,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#f59e0b';
+    ctx.fillStyle = colors.shirt;
     ctx.beginPath(); ctx.roundRect(-2,-7,8,5,1.5); ctx.fill();
     ctx.restore();
   }
 
-  function drawPed(x,y,wheelchair=false,elderly=false){
+  function drawPed(x, y, wheelchair=false, elderly=false, child=false, customColors=null){
     const s = (tract && tract.scale) ? tract.scale : 1.0;
+    const colors = customColors || { hair: '#fbbf24', clothes: '#1e293b', cane: '#78350f' };
     ctx.save();
     ctx.translate(x,y);
     ctx.scale(s, s);
     ctx.fillStyle = 'rgba(15,23,42,.18)';
     ctx.beginPath(); ctx.ellipse(0,5,5,2,0,0,Math.PI*2); ctx.fill();
     if(wheelchair){
-      ctx.fillStyle = '#7c3aed';
-      ctx.beginPath(); ctx.arc(0,-2,4,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = colors.clothes;
+      ctx.beginPath(); ctx.arc(0,-2,3.8,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = colors.hair;
+      ctx.beginPath(); ctx.arc(0,-5.5,2.0,0,Math.PI*2); ctx.fill();
       ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(-3,4,3.5,0,Math.PI*2); ctx.stroke();
-      ctx.beginPath(); ctx.arc(3,4,3.5,0,Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(-3,3.5,3.2,0,Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(3,3.5,3.2,0,Math.PI*2); ctx.stroke();
     } else if(elderly) {
-      ctx.fillStyle = '#cbd5e1';
+      ctx.fillStyle = colors.hair;
       ctx.beginPath(); ctx.arc(0,-3.5,2.7,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#d97706';
+      ctx.fillStyle = colors.clothes;
       ctx.beginPath(); ctx.roundRect(-2.5,-1,5,7,1.5); ctx.fill();
-      ctx.strokeStyle = '#78350f'; ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.moveTo(2,-2); ctx.lineTo(3.5,5); ctx.stroke();
+      ctx.strokeStyle = colors.cane; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(2,-1); ctx.lineTo(3.2,5); ctx.stroke();
+    } else if(child) {
+      ctx.scale(0.72, 0.72);
+      ctx.fillStyle = colors.hair;
+      ctx.beginPath(); ctx.arc(0,-3,2.4,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = colors.clothes;
+      ctx.beginPath(); ctx.roundRect(-2.8,-1,5.6,6.5,1.2); ctx.fill();
+      ctx.fillStyle = colors.backpack || '#f43f5e';
+      ctx.beginPath(); ctx.roundRect(-2.5,0,5.0,4.5,1); ctx.fill();
     } else {
-      ctx.fillStyle = '#fbbf24';
+      ctx.fillStyle = colors.hair;
       ctx.beginPath(); ctx.arc(0,-3,2.5,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#1e293b';
+      ctx.fillStyle = colors.clothes;
       ctx.beginPath(); ctx.roundRect(-3,-1,6,7,1.5); ctx.fill();
     }
     ctx.restore();
@@ -2179,10 +2352,10 @@
     entities.parked.forEach(p => {
       if(p.state === 'reserved') return;
       if(p.state === 'parked'){
-        drawVehicle(p.x, p.y, p.angle, p.vehicleType, {disabled:p.vehicleType==='disabled'});
+        drawVehicle(p.x, p.y, p.angle, p.vehicleType, {disabled:p.vehicleType==='disabled', customColors: p.customColors});
       } else if((p.state === 'parking' || p.state === 'unparking') && p.maneuver){
         const pos = mPos(p.maneuver);
-        drawVehicle(pos.x, pos.y, mHeading(p.maneuver), p.vehicleType, {disabled:p.vehicleType==='disabled', braking:true});
+        drawVehicle(pos.x, pos.y, mHeading(p.maneuver), p.vehicleType, {disabled:p.vehicleType==='disabled', braking:true, customColors: p.customColors});
       }
     });
 
@@ -2236,12 +2409,13 @@
           drawVehicle(p.x, p.y, p.angle, c.type, {
             braking: c.braking,
             hazard: c.state==='illegal-stopped' || c.hazard,
-            turnSignal: c.turnSignal
+            turnSignal: c.turnSignal,
+            customColors: c.customColors
           });
         }
       } else if((c.state === 'maneuver-in' || c.state === 'turning-out') && c.maneuver){
         const pos = mPos(c.maneuver);
-        drawVehicle(pos.x, pos.y, mHeading(c.maneuver), c.type, {braking:true, turnSignal: c.state === 'turning-out'});
+        drawVehicle(pos.x, pos.y, mHeading(c.maneuver), c.type, {braking:true, turnSignal: c.state === 'turning-out', customColors: c.customColors});
       }
       ctx.restore();
     });
@@ -2251,13 +2425,32 @@
       ctx.globalAlpha = getOpacity(e.t, -0.15, 1.15);
       if(e.state === 'travelling' || e.state === 'yielding'){
         const p = pointOnPath(e.path, e.t);
-        drawVehicle(p.x, p.y, p.angle, e.type, {braking: e.state==='yielding' || e.yieldingToBike});
+        drawVehicle(p.x, p.y, p.angle, e.type, {braking: e.state==='yielding' || e.yieldingToBike, customColors: e.customColors});
       } else if(e.state === 'merging'){
-        const t = e.mergeAnimT;
-        const x = lerp(e.mergeStart.x, e.mergeEnd.x, t);
-        const y = lerp(e.mergeStart.y, e.mergeEnd.y, t);
-        const a = lerpAngle(e.mergeAngle0, e.mergeAngle1, t);
-        drawVehicle(x, y, a, e.type, {});
+        const t = Math.min(1, Math.max(0, e.mergeAnimT));
+        const dist = Math.hypot(e.mergeEnd.x - e.mergeStart.x, e.mergeEnd.y - e.mergeStart.y) || 1;
+        
+        // Control Point 1 (along side-street direction)
+        const L1 = dist * 0.45;
+        const P1x = e.mergeStart.x + Math.cos(e.mergeAngle0) * L1;
+        const P1y = e.mergeStart.y + Math.sin(e.mergeAngle0) * L1;
+        
+        // Control Point 2 (along main road direction, backwards from mergeEnd)
+        const L2 = dist * 0.45;
+        const P2x = e.mergeEnd.x - Math.cos(e.mergeAngle1) * L2;
+        const P2y = e.mergeEnd.y - Math.sin(e.mergeAngle1) * L2;
+        
+        // Cubic Bezier position
+        const mt = 1 - t;
+        const x = mt*mt*mt * e.mergeStart.x + 3 * mt*mt*t * P1x + 3 * mt*t*t * P2x + t*t*t * e.mergeEnd.x;
+        const y = mt*mt*mt * e.mergeStart.y + 3 * mt*mt*t * P1y + 3 * mt*t*t * P2y + t*t*t * e.mergeEnd.y;
+        
+        // Tangent derivative for natural wheel alignment
+        const dx = 3*mt*mt * (P1x - e.mergeStart.x) + 6*mt*t * (P2x - P1x) + 3*t*t * (e.mergeEnd.x - P2x);
+        const dy = 3*mt*mt * (P1y - e.mergeStart.y) + 6*mt*t * (P2y - P1y) + 3*t*t * (e.mergeEnd.y - P2y);
+        const a = Math.atan2(dy, dx);
+        
+        drawVehicle(x, y, a, e.type, {customColors: e.customColors});
       }
       ctx.restore();
     };
@@ -2272,14 +2465,33 @@
         const p = pointOnPath(e.path, Math.min(1, e.t));
         const distToRoad = nearestCarT(p).d;
         if(distToRoad <= 80) {
-          drawVehicle(p.x, p.y, p.angle, e.type, {braking: e.state==='yielding' || e.yieldingToBike});
+          drawVehicle(p.x, p.y, p.angle, e.type, {braking: e.state==='yielding' || e.yieldingToBike, customColors: e.customColors});
         }
       } else if(e.state === 'merging'){
-        const t = e.mergeAnimT;
-        const x = lerp(e.mergeStart.x, e.mergeEnd.x, t);
-        const y = lerp(e.mergeStart.y, e.mergeEnd.y, t);
-        const a = lerpAngle(e.mergeAngle0, e.mergeAngle1, t);
-        drawVehicle(x, y, a, e.type, {});
+        const t = Math.min(1, Math.max(0, e.mergeAnimT));
+        const dist = Math.hypot(e.mergeEnd.x - e.mergeStart.x, e.mergeEnd.y - e.mergeStart.y) || 1;
+        
+        // Control Point 1 (along side-street direction)
+        const L1 = dist * 0.45;
+        const P1x = e.mergeStart.x + Math.cos(e.mergeAngle0) * L1;
+        const P1y = e.mergeStart.y + Math.sin(e.mergeAngle0) * L1;
+        
+        // Control Point 2 (along main road direction, backwards from mergeEnd)
+        const L2 = dist * 0.45;
+        const P2x = e.mergeEnd.x - Math.cos(e.mergeAngle1) * L2;
+        const P2y = e.mergeEnd.y - Math.sin(e.mergeAngle1) * L2;
+        
+        // Cubic Bezier position
+        const mt = 1 - t;
+        const x = mt*mt*mt * e.mergeStart.x + 3 * mt*mt*t * P1x + 3 * mt*t*t * P2x + t*t*t * e.mergeEnd.x;
+        const y = mt*mt*mt * e.mergeStart.y + 3 * mt*mt*t * P1y + 3 * mt*t*t * P2y + t*t*t * e.mergeEnd.y;
+        
+        // Tangent derivative for natural wheel alignment
+        const dx = 3*mt*mt * (P1x - e.mergeStart.x) + 6*mt*t * (P2x - P1x) + 3*t*t * (e.mergeEnd.x - P2x);
+        const dy = 3*mt*mt * (P1y - e.mergeStart.y) + 6*mt*t * (P2y - P1y) + 3*t*t * (e.mergeEnd.y - P2y);
+        const a = Math.atan2(dy, dx);
+        
+        drawVehicle(x, y, a, e.type, {customColors: e.customColors});
       }
       ctx.restore();
     });
@@ -2289,14 +2501,14 @@
       const opProgress = b.dir === 1 ? b.t : (1 - b.t);
       ctx.globalAlpha = getOpacity(opProgress, -0.15, 1.15);
       const pos = getBikePos(b);
-      drawBike(pos.x, pos.y, pos.angle, b.dir);
+      drawBike(pos.x, pos.y, pos.angle, b.dir, b.customColors);
       ctx.restore();
     });
     entities.peds.forEach(p => {
       ctx.save();
       ctx.globalAlpha = getOpacity(p.t, -0.15, 1.15);
       const pos = pointOnPath(p.path, p.t);
-      drawPed(pos.x, pos.y, p.wheelchair, p.elderly);
+      drawPed(pos.x, pos.y, p.wheelchair, p.elderly, p.child, p.customColors);
       ctx.restore();
     });
 

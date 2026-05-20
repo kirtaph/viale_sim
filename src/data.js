@@ -46,11 +46,11 @@ window.VialeData.tractDefs = {
 window.VialeData.tractOrder = ['D','E','F','G','H'];
 
 window.VialeData.VEHICLE_TYPES = {
-  citycar:   {name:'City car',   length:30, width:14, body:'#3b82f6', accent:'#1d4ed8', glass:'#bfdbfe', speedFactor:1.00, accel:32, decel:60, weight:0.55},
-  suv:       {name:'SUV',        length:36, width:16, body:'#1e293b', accent:'#0f172a', glass:'#94a3b8', speedFactor:0.95, accel:26, decel:54, weight:0.22},
-  van:       {name:'Furgone',    length:48, width:18, body:'#cbd5e1', accent:'#475569', glass:'#94a3b8', speedFactor:0.82, accel:20, decel:46, weight:0.10},
-  truck:     {name:'Camioncino', length:54, width:19, body:'#a16207', accent:'#713f12', glass:'#d6d3d1', speedFactor:0.72, accel:16, decel:42, weight:0.05},
-  motorbike: {name:'Moto',       length:20, width:9,  body:'#dc2626', accent:'#7f1d1d', glass:'#fecaca', speedFactor:1.18, accel:50, decel:85, weight:0.08},
+  citycar:   {name:'City car',   length:30, width:14, body:'#3b82f6', accent:'#1d4ed8', glass:'#bfdbfe', speedFactor:1.00, accel:32, decel:60, weight:0.68},
+  suv:       {name:'SUV',        length:36, width:16, body:'#1e293b', accent:'#0f172a', glass:'#94a3b8', speedFactor:0.95, accel:26, decel:54, weight:0.14},
+  van:       {name:'Furgone',    length:48, width:18, body:'#cbd5e1', accent:'#475569', glass:'#94a3b8', speedFactor:0.82, accel:20, decel:46, weight:0.05},
+  truck:     {name:'Camioncino', length:54, width:19, body:'#a16207', accent:'#713f12', glass:'#d6d3d1', speedFactor:0.72, accel:16, decel:42, weight:0.01},
+  motorbike: {name:'Moto',       length:20, width:9,  body:'#dc2626', accent:'#7f1d1d', glass:'#fecaca', speedFactor:1.18, accel:50, decel:85, weight:0.12},
   ambulance: {name:'Ambulanza', length:42, width:17, body:'#f8fafc', accent:'#dc2626', glass:'#38bdf8', speedFactor:1.45, accel:48, decel:75, weight:0.00}
 };
 
